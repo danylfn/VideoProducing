@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-23 · **Machine:** MacBook, Apple M5 Pro (15 cores), 48 GB unified memory, macOS 26.6
 
-**Result:** The pipeline is installed and every step in `README.md` ran successfully on this Mac. That covers the dry-run, the example with the real local models, and a real full-length episode written from `claude_prompt.md`. Four bugs blocked or degraded it on today's software versions; all four are fixed. One step needs you: the README's default image model (FLUX.1-schnell) now requires a free Hugging Face login, so the runs below used an equivalent ungated model, FLUX.2-klein-4B (see §3.4 and §7).
+**Result:** The pipeline is installed and every step in `README.md` ran successfully on this Mac. That covers the dry-run, the example with the real local models, and a real full-length episode written from `claude_prompt.md`. Four bugs blocked or degraded it on today's software versions; all four are fixed. The README's default image model (FLUX.1-schnell) now requires a free Hugging Face login. The episode was first made with an ungated model, FLUX.2-klein-4B, then re-made with schnell after you logged in. The comparison in §7 favors klein, which is now the default in `.env`.
 
 ---
 
@@ -10,7 +10,9 @@
 
 | Output | Location | Details |
 |---|---|---|
-| **Full episode** (Darius: From Street Orphan to the Hand of Noxus) | [output/darius_hand_of_noxus/](output/darius_hand_of_noxus/) | 11:04 master (1920×1080, 925 MB), 3 Shorts (62 s / 52 s / 55 s), SRT with 200 cues, 8 YouTube chapters, thumbnail, metadata |
+| **Full episode, FLUX.2-klein images** (recommended) | [output/darius_hand_of_noxus_klein/](output/darius_hand_of_noxus_klein/) | 11:04 master (1920×1080, 925 MB), 3 Shorts (62 s / 52 s / 55 s), SRT with 200 cues, 8 YouTube chapters, thumbnail, metadata |
+| Full episode, FLUX.1-schnell images | [output/darius_hand_of_noxus_schnell/](output/darius_hand_of_noxus_schnell/) | same voice, timing and subtitles; only the images differ |
+| Working folder with the shared cache | [output/darius_hand_of_noxus/](output/darius_hand_of_noxus/) | latest render (schnell) plus `_work/` holding both models' images, so either version re-renders in minutes |
 | README example (real models) | [output/darius_lore_ep1/](output/darius_lore_ep1/) | 1:01 master + 3 Shorts, Kokoro voice + FLUX.2-klein images |
 | Episode script | [script.json](script.json) | 66 scenes, 1508 words, 8 chapters, 5 characters, 6 pronunciation entries, 3 Shorts |
 
@@ -139,7 +141,7 @@ Pronunciation unit test: possessives (`Kha'Zix's`), multi-word keys (`Jericho Sw
 5. **Laptop sleep stops the run.** Closing the lid on battery suspended generation from 11:45 to 13:25 ("Clamshell Sleep"). `caffeinate` can't prevent that. For long runs, keep the lid open or the charger plugged in. Nothing is lost when it sleeps: everything resumes from cache.
 6. **Suggested README updates:** `brew install ffmpeg-full` (plus the PATH line) instead of `ffmpeg`; schnell now needs `hf auth login` plus accepting the license; mention `MFLUX_MODEL=flux2-klein-4b`.
 
-**Not tested:** ComfyUI actually generating images (not installed); ElevenLabs, fal.ai and Replicate with real keys (none configured: the setup is self-hosted); `MFLUX_MODEL=dev` (gated, non-commercial license); FLUX.1-schnell itself (gated, see §7).
+**Not tested:** ComfyUI actually generating images (not installed); ElevenLabs, fal.ai and Replicate with real keys (none configured: the setup is self-hosted); `MFLUX_MODEL=dev` (gated, non-commercial license).
 
 ---
 
@@ -153,25 +155,27 @@ Pronunciation unit test: possessives (`Kha'Zix's`), multi-word keys (`Jericho Sw
 | [modules/utils.py](modules/utils.py) | `measure_lufs()` helper |
 | [script.json](script.json) | **new**: full episode script |
 | `.venv/bin/activate` | adds ffmpeg-full to PATH |
-| `.env` | **new**: copied from `.env.example`, unchanged |
+| `.env` | **new**: copied from `.env.example`, with `MFLUX_MODEL=flux2-klein-4b` (not in git) |
+| `.gitignore` | **new**: excludes `.venv/`, `.env`, `output/` |
 
 ---
 
-## 7. Next step: switch to FLUX.1-schnell
+## 7. FLUX.1-schnell vs FLUX.2-klein (done after the Hugging Face login)
 
-1. Create a free account at https://huggingface.co/join.
-2. Open https://huggingface.co/black-forest-labs/FLUX.1-schnell → **Agree and access repository** (approval is instant).
-3. Create a **Read** token at https://huggingface.co/settings/tokens.
-4. Log in and re-render the images:
-   ```bash
-   cd ~/Downloads/MovieMakingMoney/LoL_Video_Pipeline
-   source .venv/bin/activate
-   hf auth login                                    # paste the token
-   python run_pipeline.py --input script.json       # MFLUX_MODEL=schnell is the default in .env
-   ```
-   Voice and everything else come from cache; only the 66 images (and their clips) are regenerated, because the model is part of the image cache key. The first run downloads schnell (expect tens of GB; downloads with a token are usually much faster than anonymous ones).
+You logged in as `ikonomovdaniel` (token saved by `hf auth login` in `~/.cache/huggingface/token`) and accepted the schnell license. The whole episode was then re-rendered with `MFLUX_MODEL=schnell`. Voice, timing and subtitles came from cache; only the images and clips were regenerated.
 
-To keep using klein instead, set `MFLUX_MODEL=flux2-klein-4b` in `.env`.
+| | FLUX.2-klein-4B | FLUX.1-schnell |
+|---|---|---|
+| Download | ~16 GB, no login | 33.7 GB, needs HF login + license (took about 2.5 h at ~3.4 MB/s) |
+| Speed (1920×1088, 8-bit, 4 steps) | ~48 s per image | ~56 s per image |
+| Following the character descriptions | **Good.** Adult Darius has the same short grey-streaked hair, scarred face and spiked plate across scenes and in the thumbnail. | **Weaker.** In scenes 1, 30 and the thumbnail Darius gets a full beard and different hair that aren't in his description. |
+| Look | Painterly, detailed | More cinematic and dramatic lighting and framing |
+| Artifacts | Occasional fake signature in a corner | No signatures seen |
+| Technical checks | ALL PASS | ALL PASS |
+
+**Why klein follows the characters better:** schnell's T5 text encoder reads only about 256 tokens. With the inserted character description and the style suffix, prompts reach that limit and details like "short-cropped hair" get dropped. Klein uses a newer text encoder with a much longer context.
+
+**Decision:** `.env` now has `MFLUX_MODEL=flux2-klein-4b`. To switch back, set `MFLUX_MODEL=schnell`; both models stay downloaded. To render either version again, set the model and run `python run_pipeline.py -i script.json`. Every image is cached per model, so switching takes only a few minutes.
 
 ---
 
