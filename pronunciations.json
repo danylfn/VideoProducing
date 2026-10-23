@@ -1,0 +1,20 @@
+{
+  "_README": "Глобален речник: важи за всички епизоди. script.json може да има собствен 'pronunciations', който е с предимство. Стойност = фонетичен правопис с тирета, или IPA в /наклонени черти/ (само Kokoro). Проверявайте с: python3 run_pipeline.py --preview \"текст\"",
+
+  "Kha'Zix": "Kah-Zix",
+  "Rek'Sai": "Reck-Sigh",
+  "Vel'Koz": "Vel-Coze",
+  "Cho'Gath": "Choe-Gath",
+  "Kog'Maw": "Kog-Maw",
+  "Kai'Sa": "Kai-Sah",
+  "Bel'Veth": "Bell-Veth",
+  "K'Sante": "Kuh-Sahn-Tay",
+  "LeBlanc": "Luh-Blonk",
+  "Aatrox": "Ay-uh-trox",
+  "Sion": "Sigh-on",
+  "Freljord": "Frell-yord",
+  "Shurima": "Shoo-ree-mah",
+  "Ionia": "Eye-oh-nee-uh",
+  "Demacia": "Deh-may-sha",
+  "Zaun": "Zawn"
+}

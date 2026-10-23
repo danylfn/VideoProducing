@@ -1,0 +1,5 @@
+# Self-hosted модели (Apple Silicon). Нужно е и: brew install espeak-ng
+-r requirements.txt
+kokoro>=0.9.4
+soundfile>=0.12
+mflux>=0.9

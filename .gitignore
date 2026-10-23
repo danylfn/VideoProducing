@@ -1,0 +1,13 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Локални настройки и ключове
+.env
+
+# Генерирани видеа, кеш и проби (Master.mp4 е ~1 GB – над лимита на GitHub)
+output/
+
+# macOS
+.DS_Store

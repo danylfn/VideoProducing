@@ -1,0 +1,101 @@
+{
+  "project_name": "darius_lore_ep1",
+  "characters": {
+    "darius": "a towering broad-shouldered warrior in his forties, short-cropped black hair with grey streaks, scarred stern face, heavy black and crimson plate armor with spiked pauldrons, tattered red cape, massive double-bladed axe",
+    "darius_young": "a gaunt dark-haired boy of about ten, sharp determined eyes, dirty face, ragged brown tunic and torn cloth wraps on his hands"
+  },
+  "pronunciations": {
+    "Basilich": "Bass-ill-itch"
+  },
+  "youtube_master": {
+    "title": "Darius: How a Street Orphan Became the Hand of Noxus | League of Legends Lore",
+    "description": "From the slums of Basilich to the right hand of the Grand General – this is the story of Darius.\n\n{{CHAPTERS}}\n\n#leagueoflegends #lol #darius #noxus #lore",
+    "tags": [
+      "league of legends",
+      "league of legends lore",
+      "darius lore",
+      "noxus",
+      "darius",
+      "lol lore"
+    ],
+    "script": [
+      {
+        "scene_id": 1,
+        "chapter": "The Law of Strength",
+        "narration": "In the harsh lands of Noxus, strength is the only currency that matters.",
+        "image_prompt": "vast dark empire capital at dusk, black iron fortress towers, crimson banners in the wind, armored legions marching on a stone road",
+        "motion": "zoom_in"
+      },
+      {
+        "scene_id": 2,
+        "narration": "And no one embodies that law more completely than the man they call the Hand of Noxus.",
+        "image_prompt": "{darius} seen from behind on a cliff, axe resting on his shoulder, burning battlefield below"
+      },
+      {
+        "scene_id": 3,
+        "narration": "But before the axe, before the legend, there was only a hungry boy in a conquered city.",
+        "image_prompt": "{darius_young} alone in a muddy war-torn medieval city street, smoke and ruined houses, cold blue morning light"
+      },
+      {
+        "scene_id": 4,
+        "chapter": "Born in the Ruins",
+        "narration": "Darius grew up on the streets of Basilich, a city Noxus had taken by force.",
+        "image_prompt": "conquered walled port city, occupying soldiers with red banners at the gates, starving townsfolk, overcast sky"
+      },
+      {
+        "scene_id": 5,
+        "narration": "He learned early that mercy was a luxury, and that only those who fought back survived.",
+        "image_prompt": "{darius_young} standing defiantly in a dark alley holding a wooden stick, protecting a smaller child, dramatic shadows"
+      },
+      {
+        "scene_id": 6,
+        "narration": "When he finally joined the legions, he did not fight for glory. He fought for an idea.",
+        "image_prompt": "young recruit in plain dark armor taking an oath before a red war banner, rows of recruits, torchlight"
+      },
+      {
+        "scene_id": 7,
+        "chapter": "The Axe and the Oath",
+        "narration": "Noxus promised that anyone, no matter where they were born, could rise through strength alone.",
+        "image_prompt": "{darius} climbing a mountain of shields and broken weapons toward a glowing throne, epic scale"
+      },
+      {
+        "scene_id": 8,
+        "narration": "Darius believed that promise with his whole heart, and he would enforce it with his whole blade.",
+        "image_prompt": "close-up of {darius}, determined expression, ember sparks, firelight reflected on dark steel"
+      },
+      {
+        "scene_id": 9,
+        "narration": "And as you'll see, that belief would make him the most feared commander in all of Runeterra.",
+        "image_prompt": "{darius} raising his axe in front of a massive army, storm clouds, red lightning, epic wide shot",
+        "motion": "zoom_out"
+      }
+    ]
+  },
+  "shorts": [
+    {
+      "short_id": 1,
+      "title": "The Law Every Noxian Lives By",
+      "description": "Strength is everything in Noxus. #shorts #leagueoflegends #darius",
+      "start_scene_id": 1,
+      "end_scene_id": 3
+    },
+    {
+      "short_id": 2,
+      "title": "Darius Was Once a Starving Orphan",
+      "description": "Before the axe, there was Basilich. #shorts #leagueoflegends #lore",
+      "start_scene_id": 4,
+      "end_scene_id": 6
+    },
+    {
+      "short_id": 3,
+      "title": "Why Darius Fights For Noxus",
+      "description": "Not for glory – for an idea. #shorts #leagueoflegends #noxus",
+      "start_scene_id": 7,
+      "end_scene_id": 9
+    }
+  ],
+  "thumbnail": {
+    "scene_id": 2,
+    "text": "From Orphan to Hand of Noxus"
+  }
+}

@@ -1,0 +1,4 @@
+requests>=2.31
+Pillow>=10.1,<13        # Pillow 13 crashes on Python 3.12 when mflux imports PIL._typing
+numpy>=1.26
+python-dotenv>=1.0
