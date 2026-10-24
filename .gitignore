@@ -1,5 +1,6 @@
 # Python
 .venv/
+.venv-video/
 __pycache__/
 *.pyc
 

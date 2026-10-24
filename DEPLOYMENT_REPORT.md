@@ -10,10 +10,7 @@
 
 | Output | Location | Details |
 |---|---|---|
-| **Full episode, FLUX.2-klein images** (recommended) | [output/darius_hand_of_noxus_klein/](output/darius_hand_of_noxus_klein/) | 11:04 master (1920×1080, 925 MB), 3 Shorts (62 s / 52 s / 55 s), SRT with 200 cues, 8 YouTube chapters, thumbnail, metadata |
-| Full episode, FLUX.1-schnell images | [output/darius_hand_of_noxus_schnell/](output/darius_hand_of_noxus_schnell/) | same voice, timing and subtitles; only the images differ |
-| Working folder with the shared cache | [output/darius_hand_of_noxus/](output/darius_hand_of_noxus/) | latest render (schnell) plus `_work/` holding both models' images, so either version re-renders in minutes |
-| README example (real models) | [output/darius_lore_ep1/](output/darius_lore_ep1/) | 1:01 master + 3 Shorts, Kokoro voice + FLUX.2-klein images |
+| **Full episode** (FLUX.2-klein images) | [output/darius_hand_of_noxus/](output/darius_hand_of_noxus/) | 11:04 master (1920×1080, 925 MB), 3 Shorts (62 s / 52 s / 55 s), SRT with 200 cues, 8 YouTube chapters, thumbnail, metadata. `_work/` keeps the voice and the 66 klein images as cache. |
 | Episode script | [script.json](script.json) | 66 scenes, 1508 words, 8 chapters, 5 characters, 6 pronunciation entries, 3 Shorts |
 
 Chapters from `metadata.txt`, with timestamps filled in by the pipeline:
@@ -33,12 +30,12 @@ Chapters from `metadata.txt`, with timestamps filled in by the pipeline:
 |---|---|
 | Homebrew packages | `brew install ffmpeg python@3.12 espeak-ng` → FFmpeg 9.0.2, Python 3.12.15, espeak-ng 1.52.0 |
 | **Extra:** `ffmpeg-full` | Homebrew's regular `ffmpeg` formula **no longer includes libass**, so it has no `subtitles` filter and subtitles would silently not be burned in. I installed `brew install ffmpeg-full` (keg-only, has libass and VideoToolbox). |
-| PATH for ffmpeg-full | Rather than editing `~/.zshrc`, I appended `export PATH="/opt/homebrew/opt/ffmpeg-full/bin:$PATH"` to `.venv/bin/activate`, so `source .venv/bin/activate` picks it up automatically. |
+| PATH for ffmpeg-full | Later, during cleanup, I uninstalled the slim `ffmpeg` (nothing else depended on it) and ran `brew link --force ffmpeg-full`, so `/opt/homebrew/bin/ffmpeg` is now the full build everywhere. `.venv/bin/activate` also prepends the ffmpeg-full path, as a safeguard. |
 | venv + packages | `python3.12 -m venv .venv` + `pip install -r requirements-local.txt` → kokoro 0.9.4, mflux 0.23.0, mlx 0.32.4, torch 2.14.1, Pillow 12.3.0 (pinned, see §3.1) |
 | `.env` | `cp .env.example .env` (defaults unchanged) |
 | Model downloads | Kokoro-82M (~330 MB) and FLUX.2-klein-4B (~15 GB) into `~/.cache/huggingface`. On its first run Kokoro also pip-installs spaCy `en_core_web_sm` (12.8 MB) into the venv by itself, so the first run needs internet even with `HF_HUB_OFFLINE`. |
 
-Disk used: `.venv` 1.5 GB, Hugging Face cache 15 GB, outputs about 3 GB.
+Disk used after cleanup: `.venv` 1.5 GB, Hugging Face cache 16.3 GB (FLUX.2-klein + Kokoro; the FLUX.1-schnell weights were deleted once klein was chosen), outputs about 2 GB.
 
 ---
 
@@ -175,7 +172,7 @@ You logged in as `ikonomovdaniel` (token saved by `hf auth login` in `~/.cache/h
 
 **Why klein follows the characters better:** schnell's T5 text encoder reads only about 256 tokens. With the inserted character description and the style suffix, prompts reach that limit and details like "short-cropped hair" get dropped. Klein uses a newer text encoder with a much longer context.
 
-**Decision:** `.env` now has `MFLUX_MODEL=flux2-klein-4b`. To switch back, set `MFLUX_MODEL=schnell`; both models stay downloaded. To render either version again, set the model and run `python run_pipeline.py -i script.json`. Every image is cached per model, so switching takes only a few minutes.
+**Decision:** `.env` now has `MFLUX_MODEL=flux2-klein-4b`. During cleanup, the schnell weights (33.7 GB), the schnell episode and the schnell images were deleted. Switching back means setting `MFLUX_MODEL=schnell` and re-downloading the weights (your Hugging Face login is still saved).
 
 ---
 
@@ -183,7 +180,7 @@ You logged in as `ikonomovdaniel` (token saved by `hf auth login` in `~/.cache/h
 
 ```bash
 cd ~/Downloads/MovieMakingMoney/LoL_Video_Pipeline
-source .venv/bin/activate                      # also puts ffmpeg-full on PATH
+source .venv/bin/activate
 python run_pipeline.py -i script.example.json --dry-run    # 30 s smoke test
 python run_pipeline.py -i script.json --check              # validate a new script
 python run_pipeline.py -i script.json                      # full run
