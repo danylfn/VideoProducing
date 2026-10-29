@@ -102,8 +102,9 @@ def write_short_subs(words: list[dict], duration: float, title: str, ass_path: P
     W, H = cfg.short_width, cfg.short_height
     cap = (f"Style: Cap,{cfg.subs_font},{cfg.subs_short_size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,"
            f"-1,0,0,0,100,100,1,0,1,7,3,2,60,60,520,1")
+    title_margin = 70 if cfg.shorts_layout == "zoom" else 250  # при zoom заглавието е в лентата над видеото
     ttl = (f"Style: Title,{cfg.subs_font},70,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,"
-           f"-1,0,0,0,100,100,0,0,1,6,3,8,70,70,250,1")
+           f"-1,0,0,0,100,100,0,0,1,6,3,8,70,70,{title_margin},1")
     lines = [_header(W, H, [cap, ttl])]
 
     if title and cfg.shorts_title_overlay:

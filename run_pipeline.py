@@ -19,7 +19,7 @@ from pathlib import Path
 
 from config import Config
 from modules.audio_engine import generate_audio
-from modules.image_engine import generate_images
+from modules.image_engine import generate_images, generate_thumbnail_images
 from modules.master_builder import build_master_audio, concat_clips, render_master, render_scene_clips
 from modules.metadata_engine import write_metadata
 from modules.pronunciation import Lexicon, load_global, report
@@ -41,7 +41,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--check", action="store_true", help="само валидация и оценка")
     p.add_argument("--preview", metavar="ТЕКСТ", help="озвучава само този текст (за настройка на глас/произношение)")
     p.add_argument("--res", choices=["1080", "4k"])
-    p.add_argument("--layout", choices=["blur", "crop"], help="оформление на Shorts")
+    p.add_argument("--layout", choices=["zoom", "blur", "crop"], help="оформление на Shorts")
     p.add_argument("--encoder", help="напр. h264_videotoolbox | libx264 | hevc_videotoolbox")
     p.add_argument("--music", help="файл или папка с фонова музика")
     p.add_argument("--no-subs", action="store_true")
@@ -111,10 +111,11 @@ def main() -> int:
 
     log.info("━━ [2/6] Изображения")
     images = generate_images(scenes, work, cfg, a.force, data["characters"])
+    thumb_images = generate_thumbnail_images(data, work, cfg, a.force)
 
     log.info("━━ [3/6] Времева линия + аудио микс")
     tl = build_timeline(scenes, audio, work, cfg)
-    master_audio = build_master_audio(tl, work, cfg, seed=data["project_name"])
+    master_audio, music = build_master_audio(tl, work, cfg, seed=data["project_name"])
     log.info("   Обща дължина: %s", fmt_ts(tl["duration"]))
 
     if cfg.motion_engine == "ltx":
@@ -137,7 +138,7 @@ def main() -> int:
         log.info("━━ [6/6] Shorts (%s)", cfg.shorts_layout)
         shorts = build_shorts(data, tl, clips, master_audio, work, out_dir, cfg)
 
-    write_metadata(data, scenes, tl, shorts, images, out_dir, cfg)
+    write_metadata(data, scenes, tl, shorts, images, out_dir, cfg, music=music, thumb_images=thumb_images)
     if a.clean:
         shutil.rmtree(work, ignore_errors=True)
 

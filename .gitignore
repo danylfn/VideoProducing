@@ -12,3 +12,7 @@ output/
 
 # macOS
 .DS_Store
+
+# Музиката (песните не се качват; README и кредитите остават локално до песните)
+music/*
+!music/README.md

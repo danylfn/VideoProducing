@@ -11,8 +11,8 @@ import random
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from .utils import (ensure_dir, file_hash, file_sig, log, measure_lufs, run_ffmpeg, short_hash, stamp_ok,
-                    stamp_write, video_encoder_args)
+from .utils import (ensure_dir, ffprobe_duration, file_hash, file_sig, log, measure_lufs, run_ffmpeg, short_hash,
+                    stamp_ok, stamp_write, video_encoder_args)
 
 AUDIO_EXT = {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".aiff"}
 
@@ -78,40 +78,71 @@ def concat_clips(clips: list[Path], out: Path) -> Path:
     return out
 
 
-def _pick_music(cfg, seed: str) -> Path | None:
+MUSIC_XFADE = 3.0  # секунди crossfade между песните във фона
+
+
+def _music_tracks(cfg, seed: str) -> list[Path]:
+    """Песните за фона: всички от папката (разбъркани детерминирано по проекта) или един файл."""
     if not cfg.music_path:
-        return None
+        return []
     p = Path(cfg.music_path).expanduser()
+    if not p.is_absolute():
+        p = Path(__file__).resolve().parents[1] / p  # спрямо папката на проекта, не текущата директория
     if p.is_dir():
         tracks = sorted(f for f in p.iterdir() if f.suffix.lower() in AUDIO_EXT)
         if not tracks:
             log.warning("В %s няма аудио файлове – продължавам без музика", p)
-            return None
-        return random.Random(seed).choice(tracks)
+        random.Random(seed).shuffle(tracks)
+        return tracks
     if p.exists():
-        return p
+        return [p]
     log.warning("MUSIC_PATH=%s не съществува – продължавам без музика", p)
-    return None
+    return []
 
 
-def build_master_audio(timeline: dict, work: Path, cfg, seed: str) -> Path:
+def _music_bed(tracks: list[Path], dur: float, work: Path, cfg) -> tuple[Path, list[Path]]:
+    """Залепва песни с crossfade, докато покрият цялото видео -> без повторение на една и съща песен.
+    Ако песните са по-къси от видеото, списъкът се повтаря. Връща файла и реално ползваните песни."""
+    used, total = [], 0.0
+    while total < dur + 1.0:
+        t = tracks[len(used) % len(tracks)]
+        total += ffprobe_duration(t) - (MUSIC_XFADE if used else 0.0)
+        used.append(t)
+    out = work / "music_bed.wav"
+    key = short_hash([file_sig(t) for t in used], round(dur, 2), MUSIC_XFADE, cfg.sample_rate)
+    if not stamp_ok(out, key):
+        chains = [f"[{i}:a]aresample={cfg.sample_rate},aformat=channel_layouts=stereo[a{i}]" for i in range(len(used))]
+        prev = "[a0]"
+        for i in range(1, len(used)):
+            chains.append(f"{prev}[a{i}]acrossfade=d={MUSIC_XFADE}:c1=tri:c2=tri[x{i}]")
+            prev = f"[x{i}]"
+        chains.append(f"{prev}anull[out]")
+        run_ffmpeg([*[x for t in used for x in ("-i", t)], "-filter_complex", ";".join(chains), "-map", "[out]",
+                    "-t", f"{dur:.4f}", "-ar", cfg.sample_rate, "-ac", 2, "-c:a", "pcm_s16le", out])
+        stamp_write(out, key)
+    return out, list(dict.fromkeys(used))
+
+
+def build_master_audio(timeline: dict, work: Path, cfg, seed: str) -> tuple[Path, list[Path]]:
+    """Глас + музика (със заглушаване под гласа) + -14 LUFS. Връща (WAV, ползваните песни – за кредитите)."""
     out = work / "master_audio.wav"
     dur = timeline["duration"]
-    music = _pick_music(cfg, seed)
-    key = short_hash(file_hash(timeline["narration"]), file_sig(music) if music else None,
+    tracks = _music_tracks(cfg, seed)
+    bed, used = _music_bed(tracks, dur, work, cfg) if tracks else (None, [])
+    key = short_hash(file_hash(timeline["narration"]), file_sig(bed) if bed else None,
                      cfg.music_volume, cfg.target_lufs, "lufs-fix")
     if stamp_ok(out, key):
-        return out
+        return out, used
     norm = f"loudnorm=I={cfg.target_lufs}:TP=-1.5:LRA=11,aresample={cfg.sample_rate}"
-    if music:
-        log.info("🎵 Фонова музика: %s", music.name)
+    if bed:
+        log.info("🎵 Фонова музика: %s", ", ".join(t.stem for t in used))
         fade_st = max(0.0, dur - 4)
         fc = (f"[0:a]aformat=channel_layouts=stereo,asplit=2[v][sc];"
               f"[1:a]aformat=channel_layouts=stereo,aresample={cfg.sample_rate},volume={cfg.music_volume},"
               f"afade=t=in:d=2,afade=t=out:st={fade_st:.2f}:d=4[m];"
               f"[m][sc]sidechaincompress=threshold=0.02:ratio=6:attack=15:release=450[duck];"
               f"[v][duck]amix=inputs=2:duration=first:normalize=0,{norm}[out]")
-        run_ffmpeg(["-i", timeline["narration"], "-stream_loop", "-1", "-i", music,
+        run_ffmpeg(["-i", timeline["narration"], "-i", bed,
                     "-filter_complex", fc, "-map", "[out]", "-t", f"{dur:.4f}",
                     "-ar", cfg.sample_rate, "-ac", 2, "-c:a", "pcm_s16le", out])
     else:
@@ -126,7 +157,7 @@ def build_master_audio(timeline: dict, work: Path, cfg, seed: str) -> Path:
         tmp.replace(out)
     log.info("🔉 Сила на звука: %.1f LUFS (цел %.0f)", measure_lufs(out), cfg.target_lufs)
     stamp_write(out, key)
-    return out
+    return out, used
 
 
 def render_master(video: Path, audio: Path, ass: Path | None, out: Path, cfg) -> Path:

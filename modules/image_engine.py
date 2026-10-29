@@ -346,3 +346,18 @@ def generate_images(scenes: list[dict], work: Path, cfg, force: bool = False,
     workers = 1 if engine in ("comfyui", "mflux") else cfg.image_workers
     with ThreadPoolExecutor(max_workers=workers) as ex:
         return list(ex.map(job, scenes))
+
+
+def generate_thumbnail_images(data: dict, work: Path, cfg, force: bool = False) -> list[Path | None]:
+    """Собствени картини за thumbnail вариантите, които имат "prompt" (напр. лице отблизо със силна емоция).
+    Връща списък, подравнен с вариантите: картина или None (тогава се ползва кадър от сцена)."""
+    variants = (data.get("thumbnail") or {}).get("variants") or []
+    todo = [(k, v) for k, v in enumerate(variants) if v.get("prompt")]
+    if not todo:
+        return []
+    made = generate_images([{"scene_id": k + 1, "image_prompt": v["prompt"]} for k, v in todo],
+                           work / "thumbs", cfg, force, data.get("characters"))
+    out: list[Path | None] = [None] * len(variants)
+    for (k, _), img in zip(todo, made):
+        out[k] = img
+    return out

@@ -17,6 +17,7 @@
   },
   "youtube_master": {
     "title": "Darius: From Street Orphan to the Hand of Noxus | League of Legends Lore",
+    "title_variants": ["He Beheaded His Own General and Noxus Promoted Him | Darius League of Legends Lore", "Why Darius Never Retreats | League of Legends Lore"],
     "description": "He beheaded his own general for ordering a retreat, and Noxus rewarded him for it. This is the full story of Darius, from the slums of Basilich to a seat on the Trifarix.\n\n{{CHAPTERS}}\n\n#leagueoflegends #darius #noxus #lollore",
     "tags": [
       "league of legends",
@@ -103,9 +104,18 @@
     ]
   },
   "shorts": [
-    {"short_id": 1, "title": "He Beheaded His Own General", "description": "One order to retreat. One swing of an axe. #shorts #leagueoflegends #darius #noxus", "start_scene_id": 26, "end_scene_id": 31},
-    {"short_id": 2, "title": "Darius Was a Starving Orphan", "description": "Before the axe, there was Basilich. #shorts #leagueoflegends #lore #darius", "start_scene_id": 5, "end_scene_id": 9},
-    {"short_id": 3, "title": "The Emperor Was Dead. His Brother Helped.", "description": "Darius came home to a coup. #shorts #leagueoflegends #swain #draven", "start_scene_id": 50, "end_scene_id": 55}
+    {"short_id": 1, "title": "Darius Was a Starving Orphan", "description": "He had more scars at twelve than most soldiers get in a lifetime. #shorts #leagueoflegends #darius #lore", "start_scene_id": 9, "end_scene_id": 12},
+    {"short_id": 2, "title": "Why Noxus Took In Two Street Rats", "description": "A conquering general saw something in two orphans. #shorts #leagueoflegends #darius #draven #noxus", "start_scene_id": 16, "end_scene_id": 19},
+    {"short_id": 3, "title": "He Beheaded His Own General", "description": "One order to retreat. One swing of an axe. #shorts #leagueoflegends #darius #noxus", "start_scene_id": 29, "end_scene_id": 33},
+    {"short_id": 4, "title": "The Man Who Never Wanted Power", "description": "They made him the Hand of Noxus. He wanted only one thing. #shorts #leagueoflegends #darius #lore", "start_scene_id": 39, "end_scene_id": 41},
+    {"short_id": 5, "title": "Even Darius Could Not Conquer the North", "description": "Ambushed, hunted and captured in the Freljord. #shorts #leagueoflegends #darius #freljord", "start_scene_id": 44, "end_scene_id": 47},
+    {"short_id": 6, "title": "The Emperor Was Dead. His Brother Helped.", "description": "Darius came home to a coup. #shorts #leagueoflegends #swain #draven", "start_scene_id": 50, "end_scene_id": 53}
   ],
-  "thumbnail": {"scene_id": 30, "text": "He Never Retreats"}
+  "thumbnail": {
+    "variants": [
+      {"prompt": "extreme close-up of {darius} roaring in rage, rain running down his scarred face, bloodied axe raised beside him, dark stormy background, subject on the right half of the frame", "text": "HE NEVER RETREATS"},
+      {"prompt": "close-up of {darius} with a cold menacing stare, lit by red firelight, a fallen silver general's helmet in the mud in the foreground, dark smoky background, subject on the right half of the frame", "text": "HE KILLED HIS GENERAL"},
+      {"prompt": "close-up of {darius_young} with defiant furious eyes in a dark rain-soaked alley, the huge shadow of an axe-wielding warrior on the wall behind him, subject on the right half of the frame", "text": "THE ORPHAN WHO ROSE"}
+    ]
+  }
 }

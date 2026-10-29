@@ -10,12 +10,19 @@ LORE ACCURACY
 - Use the current official canon (universe.leagueoflegends.com and official short stories/cinematics). If something was retconned, use the current version. Never invent events, names or quotes. If a detail is uncertain or fan-speculation, frame it as such in the narration ("Some believe...").
 
 STRUCTURE & LENGTH (the video must be ~10 minutes)
-- Total narration: 1450–1550 words across all scenes.
-- 60–75 scenes. Each scene's narration = 1–2 complete sentences, 15–30 words.
-- Scene 1–3 = a strong hook (a question, a shocking fact or a dramatic moment), NOT "Welcome back to the channel".
-- 5–8 chapters. Mark the first scene of each chapter with a "chapter" field (2–5 words). Scene 1 must have a chapter.
-- Last 2–3 scenes: a payoff + a short call to action (subscribe / which champion next).
+- Total narration: 1300–1400 words across all scenes (the voice reads ~136 words per minute including pauses).
+- 60–70 scenes. Each scene's narration = 1–2 complete sentences, 15–28 words.
 - Narration is pure spoken text: no stage directions, no brackets, no emojis, no abbreviations a voice actor would stumble on.
+
+RETENTION (what YouTube and TikTok reward – follow strictly)
+- COLD OPEN (scenes 1–3, first ~20 seconds): start with the single most dramatic, surprising or emotional moment of the whole story, told in the present tense, before any context. Scene 1's first sentence must work as a hook on its own. Never "Welcome back", never "In this video we'll talk about".
+- Within the first 30 seconds, promise what the viewer will learn ("…and the reason why will change how you see Noxus").
+- OPEN LOOPS: roughly every 60 seconds (every 6–8 scenes) raise a question the story answers later ("But that was not the worst of it.", "He had no idea who was waiting in the capital."). Pay every loop off.
+- Escalate: each chapter must raise the stakes compared to the previous one. Cut anything that does not move the story.
+- Concrete over abstract: names, places, sensory details and actions, not generic praise ("he was very strong").
+- 5–8 chapters. Mark the first scene of each chapter with a "chapter" field (2–5 words, curiosity-driven). Scene 1 must have a chapter.
+- Last 2–3 scenes: the emotional payoff that answers the cold open, then ONE short call to action that asks a specific question for the comments (e.g. "Who should we cover next: Draven or Swain?").
+- ORIGINALITY (YouTube demonetizes channels whose videos look template-made): give this episode its own angle and thesis (for example "the one decision that defined him" or "the villain's side of the story"), vary the opening style and chapter structure from episode to episode, and avoid stock phrases.
 
 CHARACTERS (visual consistency – critical)
 - Define every character who appears in more than one image in "characters": a snake_case key -> ONE noun phrase of 25–45 words starting with "a"/"an": apparent age, build, face and hair, signature armor/clothing with exact colors, weapon or key prop. Purely visual: no names, no lore, no personality.
@@ -38,16 +45,23 @@ VIDEO PROMPTS (English, always – every scene gets one)
 PRONUNCIATIONS (for the text-to-speech voice)
 - In "pronunciations", list every unusual proper noun that appears in the narration (champions, places, factions, items) that an English TTS voice might mispronounce. Map the exact spelling used in the narration -> a simple English phonetic respelling with hyphens between syllables, e.g. "Kha'Zix": "Kah-Zix", "Freljord": "Frell-yord". Use the official/in-game pronunciation. No IPA. Skip ordinary English words.
 
-SHORTS (exactly 3)
-- Each short = a contiguous scene range (start_scene_id..end_scene_id), 90–140 words of narration (~35–55 seconds), no overlap between shorts.
-- The FIRST scene of each range must work as a standalone hook without prior context; the last scene must land a payoff.
-- Short title ≤ 60 characters, curiosity-driven. Description with 3–5 hashtags including #shorts.
+SHORTS (5–6, for YouTube Shorts and TikTok – the biggest source of new viewers)
+- Each short = a contiguous scene range (start_scene_id..end_scene_id), 55–100 words of narration (~25–45 seconds), no overlap between shorts. Spread them across the whole story.
+- The FIRST sentence of each range is the hook and must grab a stranger in the first second, with no prior context: a shocking fact, a bold claim or a question ("He beheaded his own general – and got promoted.").
+- The LAST scene lands a payoff, ideally one that connects back to the first line, so the short loops naturally and gets rewatched.
+- Prefer ranges that are self-contained mini-stories with one clear emotion (shock, injustice, triumph, betrayal).
+- Short title ≤ 60 characters, curiosity-driven (it is shown on screen during the short). Description: one hook sentence + 3–5 hashtags including #shorts and #leagueoflegends.
 
 YOUTUBE METADATA
-- Title ≤ 90 characters, SEO-friendly, includes the champion name and "League of Legends Lore".
+- Title ≤ 90 characters, SEO-friendly, includes the champion name and "League of Legends Lore", built on curiosity or conflict, not a plain summary.
+- "title_variants": 2 alternative titles with clearly different angles (for YouTube's title A/B test).
 - Description: 2–3 hook sentences, then the literal placeholder {{CHAPTERS}} on its own line (the pipeline fills real timestamps – never write timestamps yourself), then 3–5 hashtags. No "<" or ">" characters.
 - 10–15 tags.
-- thumbnail: pick the scene with the most striking image; text of max 5 punchy words.
+
+THUMBNAILS (3 variants for YouTube's thumbnail A/B test – click-through rate decides whether the video is shown at all)
+- Each variant has its own "prompt" (an image prompt, English, max 35 words) and "text" (max 4 punchy words, ALL the curiosity, none of the answer).
+- The image: ONE subject, close-up or medium close-up, a strong readable emotion (rage, shock, grief, menace), high contrast against a simple dark background, subject on the RIGHT half (the text goes on the left). Refer to characters only as {key}. No text in the image.
+- Make the 3 variants genuinely different (different moment, emotion or framing), not three versions of the same picture.
 
 OUTPUT: Return ONLY valid JSON (no comments, no trailing commas) matching exactly this schema:
 
@@ -62,6 +76,7 @@ OUTPUT: Return ONLY valid JSON (no comments, no trailing commas) matching exactl
   },
   "youtube_master": {
     "title": "...",
+    "title_variants": ["...", "..."],
     "description": "...\n\n{{CHAPTERS}}\n\n#hashtags",
     "tags": ["...", "..."],
     "script": [
@@ -70,7 +85,13 @@ OUTPUT: Return ONLY valid JSON (no comments, no trailing commas) matching exactl
     ]
   },
   "shorts": [
-    {"short_id": 1, "title": "...", "description": "... #shorts", "start_scene_id": 1, "end_scene_id": 6}
+    {"short_id": 1, "title": "...", "description": "... #shorts #leagueoflegends", "start_scene_id": 1, "end_scene_id": 4}
   ],
-  "thumbnail": {"scene_id": 5, "text": "MAX FIVE WORDS"}
+  "thumbnail": {
+    "variants": [
+      {"prompt": "extreme close-up of {darius} roaring in rage, ... dark background, subject on the right", "text": "MAX FOUR WORDS"},
+      {"prompt": "...", "text": "..."},
+      {"prompt": "...", "text": "..."}
+    ]
+  }
 }

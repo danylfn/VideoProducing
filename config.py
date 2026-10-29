@@ -135,7 +135,7 @@ class Config:
     subs_short_highlight: bool = True    # TikTok стил: текущата дума светва в жълто
 
     # ---------- Shorts ----------
-    shorts_layout: str = field(default_factory=lambda: _env("SHORTS_LAYOUT", "blur"))  # blur | crop
+    shorts_layout: str = field(default_factory=lambda: _env("SHORTS_LAYOUT", "zoom"))  # zoom | blur | crop
     shorts_title_overlay: bool = True
     shorts_max_sec: float = field(default_factory=lambda: _env_float("SHORTS_MAX_SEC", 60.0))
 
@@ -143,7 +143,7 @@ class Config:
     pronunciations_file: Path = BASE_DIR / "pronunciations.json"
 
     # ---------- Скрипт ----------
-    words_per_minute: float = 150.0      # за оценка на дължина преди генерация
+    words_per_minute: float = 136.0      # за оценка на дължина; измерено: Kokoro @0.95 + паузи между сцените
     target_minutes: float = 10.0
 
     # ---------- Шрифтове за Pillow (thumbnail / placeholder) ----------

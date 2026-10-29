@@ -62,6 +62,19 @@ def load_script(path: Path, cfg) -> dict:
     if sum(len(t) + 1 for t in tags) > 500:
         warns.append("Таговете надхвърлят 500 символа – YouTube ще отреже част от тях")
     yt["tags"] = tags
+    alt = yt.get("title_variants") or []
+    if not isinstance(alt, list) or not all(isinstance(t, str) and t.strip() for t in alt):
+        errors.append("youtube_master.title_variants трябва да е списък от заглавия")
+        alt = []
+    if len(alt) > 2:
+        warns.append("YouTube тества до 3 заглавия – ползвам основното + първите 2 варианта")
+        alt = alt[:2]
+    for t in alt:
+        if len(t) > 100:
+            errors.append(f"Вариант на заглавие е {len(t)} символа (лимит 100): {t[:40]}…")
+        if any(c in t for c in "<>"):
+            errors.append("YouTube не позволява '<' и '>' в заглавие")
+    yt["title_variants"] = [t.strip() for t in alt]
 
     scenes = yt.get("script")
     if not isinstance(scenes, list) or not scenes:
@@ -146,6 +159,8 @@ def load_script(path: Path, cfg) -> dict:
                      f"(~{int(cfg.target_minutes * cfg.words_per_minute)} думи)")
 
     shorts = data.get("shorts", []) or []
+    if len(shorts) > 6:
+        warns.append(f"{len(shorts)} shorts – препоръчват се 3–6 на епизод")
     for sh in shorts:
         sid = sh.get("short_id", "?")
         a, b = sh.get("start_scene_id"), sh.get("end_scene_id")
@@ -168,6 +183,24 @@ def load_script(path: Path, cfg) -> dict:
     if thumb.get("scene_id") is not None and thumb["scene_id"] not in index:
         warns.append("thumbnail.scene_id не съществува – ще ползвам първата сцена")
         thumb.pop("scene_id")
+    variants = thumb.get("variants") or []
+    if not isinstance(variants, list) or not all(isinstance(v, dict) for v in variants):
+        errors.append("thumbnail.variants трябва да е списък от {\"prompt\": ..., \"text\": ...}")
+        variants = []
+    if len(variants) > 3:
+        warns.append("YouTube тества до 3 thumbnails – ползвам първите 3 варианта")
+        variants = variants[:3]
+    for k, v in enumerate(variants, 1):
+        for ref in CHAR_REF.findall(str(v.get("prompt", ""))):
+            if ref.lower() not in chars:
+                errors.append(f"thumbnail вариант {k}: {{{ref}}} не е дефиниран в 'characters'")
+        if v.get("scene_id") is not None and v["scene_id"] not in index:
+            errors.append(f"thumbnail вариант {k}: сцена {v['scene_id']} не съществува")
+        if len(str(v.get("text", "")).split()) > 5:
+            warns.append(f"thumbnail вариант {k}: текстът е над 5 думи – на малкия размер ще е нечетим")
+    thumb["variants"] = variants
+    if errors:
+        raise ScriptError("Грешки в thumbnail/заглавия:\n  - " + "\n  - ".join(errors))
     data["thumbnail"] = thumb
 
     for w in warns:

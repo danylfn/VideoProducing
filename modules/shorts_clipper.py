@@ -16,13 +16,16 @@ from .utils import (ensure_dir, file_sig, log, run_ffmpeg, short_hash, stamp_ok,
 
 def _layout_filter(cfg, subs: str | None) -> str:
     W, H = cfg.short_width, cfg.short_height
+    bg = (f"[0:v]split=2[bg][fg];"
+          f"[bg]scale={W // 4}:{H // 4}:force_original_aspect_ratio=increase,crop={W // 4}:{H // 4},"
+          f"boxblur=12:2,scale={W}:{H},eq=brightness=-0.10:saturation=1.15[bgb];")
     if cfg.shorts_layout == "crop":
         chain = f"[0:v]crop=ih*{W}/{H}:ih,scale={W}:{H}:flags=lanczos,setsar=1"
-    else:  # blur: замъглен фон + оригиналният 16:9 кадър в центъра
-        chain = (f"[0:v]split=2[bg][fg];"
-                 f"[bg]scale={W // 4}:{H // 4}:force_original_aspect_ratio=increase,crop={W // 4}:{H // 4},"
-                 f"boxblur=12:2,scale={W}:{H},eq=brightness=-0.10:saturation=1.15[bgb];"
-                 f"[fg]scale={W}:-2:flags=lanczos[fgs];"
+    elif cfg.shorts_layout == "zoom":  # централен 4:5 изрез на 70% от височината върху замъглен фон
+        chain = (bg + f"[fg]crop=ih*4/5:ih,scale={W}:{W * 5 // 4}:flags=lanczos[fgs];"
+                 f"[bgb][fgs]overlay=(W-w)/2:(H-h)/2,setsar=1")
+    else:  # blur: замъглен фон + целият 16:9 кадър в центъра
+        chain = (bg + f"[fg]scale={W}:-2:flags=lanczos[fgs];"
                  f"[bgb][fgs]overlay=(W-w)/2:(H-h)/2,setsar=1")
     if subs:
         chain += f",subtitles=filename={subs}"

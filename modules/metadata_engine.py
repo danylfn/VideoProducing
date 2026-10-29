@@ -1,10 +1,10 @@
-"""Метаданни за качване: реални YouTube глави, metadata.txt/json, SRT, thumbnail."""
+"""Метаданни за качване: реални YouTube глави, metadata.txt/json, thumbnails (A/B варианти), кредити за музиката."""
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageEnhance
 
 from .image_engine import load_font
 from .utils import fmt_ts, log
@@ -30,16 +30,34 @@ def build_chapters(scenes: list[dict], timeline: dict) -> list[tuple[float, str]
     return merged
 
 
-def make_description(base: str, chapters: list[tuple[float, str]]) -> str:
+def make_description(base: str, chapters: list[tuple[float, str]], credits: list[str] | None = None) -> str:
     block = "\n".join(f"{fmt_ts(t)} {title}" for t, title in chapters)
     if "{{CHAPTERS}}" in base:
-        return base.replace("{{CHAPTERS}}", block).strip()
-    return f"{base.strip()}\n\n⏱ Chapters\n{block}".strip() if block else base.strip()
+        desc = base.replace("{{CHAPTERS}}", block).strip()
+    else:
+        desc = f"{base.strip()}\n\n⏱ Chapters\n{block}".strip() if block else base.strip()
+    if credits:
+        desc += "\n\n🎵 Music:\n" + "\n\n".join(credits)
+    return desc
+
+
+def music_credits(tracks: list[Path] | None) -> list[str]:
+    """Текстът за кредит на всяка песен е в съседен файл <песен>.txt (лицензите като CC BY го изискват)."""
+    credits = []
+    for t in tracks or []:
+        note = t.with_suffix(".txt")
+        if note.exists():
+            credits.append(note.read_text(encoding="utf-8").strip())
+        else:
+            log.warning("⚠️  Няма кредит за музиката %s (създайте %s, ако лицензът го изисква)", t.name, note.name)
+    return credits
 
 
 def make_thumbnail(img_path: Path, text: str, out: Path, cfg) -> Path:
     W, H = 1280, 720
     img = Image.open(img_path).convert("RGB").resize((W, H), Image.LANCZOS)
+    # по-наситен и контрастен кадър: изпъква в малкия размер на началната страница
+    img = ImageEnhance.Color(ImageEnhance.Contrast(img).enhance(1.12)).enhance(1.15)
     if text:
         # тъмен градиент отляво за четимост
         overlay = Image.new("L", (W, H), 0)
@@ -73,14 +91,37 @@ def make_thumbnail(img_path: Path, text: str, out: Path, cfg) -> Path:
 
 
 def write_metadata(data: dict, scenes: list[dict], timeline: dict, shorts: list[dict],
-                   images: list[Path], out_dir: Path, cfg) -> dict:
+                   images: list[Path], out_dir: Path, cfg, music: list[Path] | None = None,
+                   thumb_images: list[Path] | None = None) -> dict:
     yt = data["youtube_master"]
     chapters = build_chapters(scenes, timeline)
-    desc = make_description(yt.get("description", ""), chapters)
+    credits = music_credits(music)
+    desc = make_description(yt.get("description", ""), chapters, credits)
+    if credits:  # Shorts носят същата музика -> кратък кредит и в техните описания
+        short_credit = "🎵 Music: " + "; ".join(c.splitlines()[0] for c in credits) + " (CC BY 4.0)"
+        shorts = [{**s, "description": f"{s['description'].strip()}\n\n{short_credit}"} for s in shorts]
+    titles = [yt["title"], *yt.get("title_variants", [])]
+
+    # thumbnails: варианти със собствена картина (thumb_images) или кадър от сцена + текст
+    th = data.get("thumbnail") or {}
+    variants = th.get("variants") or [{"text": th.get("text", "")}]
+    thumbs = []
+    for k, v in enumerate(variants):
+        if thumb_images and k < len(thumb_images) and thumb_images[k]:
+            src = thumb_images[k]
+        else:
+            src = images[data["_index"].get(v.get("scene_id", th.get("scene_id")), 0)]
+        name = "thumbnail.jpg" if k == 0 else f"thumbnail_{k + 1}.jpg"
+        make_thumbnail(src, v.get("text", ""), out_dir / name, cfg)
+        thumbs.append(name)
+    for old in out_dir.glob("thumbnail_*.jpg"):  # варианти от предишен рън с повече thumbnails
+        if old.name not in thumbs:
+            old.unlink()
+
     meta = {
-        "master": {"file": "Master.mp4", "title": yt["title"], "description": desc, "tags": yt["tags"],
-                   "duration": round(timeline["duration"], 2), "captions": "Master.srt",
-                   "thumbnail": "thumbnail.jpg",
+        "master": {"file": "Master.mp4", "title": yt["title"], "title_variants": titles[1:], "description": desc,
+                   "tags": yt["tags"], "duration": round(timeline["duration"], 2), "captions": "Master.srt",
+                   "thumbnail": thumbs[0], "thumbnails": thumbs,
                    "chapters": [{"t": fmt_ts(t), "title": c} for t, c in chapters]},
         "shorts": shorts,
     }
@@ -88,14 +129,15 @@ def write_metadata(data: dict, scenes: list[dict], timeline: dict, shorts: list[
 
     sep = "=" * 70
     txt = [sep, "YOUTUBE MASTER", sep, f"Файл: Master.mp4  ({fmt_ts(timeline['duration'])})", "",
-           "ЗАГЛАВИЕ:", yt["title"], "", "ОПИСАНИЕ:", desc, "", "ТАГОВЕ:", ", ".join(yt["tags"]), "",
-           "Субтитри за качване: Master.srt   |   Thumbnail: thumbnail.jpg", ""]
+           "ЗАГЛАВИЕ:", titles[0], ""]
+    if len(titles) > 1 or len(thumbs) > 1:
+        txt += ["A/B ТЕСТ (YouTube Studio → Test & Compare):"]
+        txt += [f"  заглавие {k + 1}: {t}" for k, t in enumerate(titles)]
+        txt += [f"  thumbnail {k + 1}: {t}" for k, t in enumerate(thumbs)] + [""]
+    txt += ["ОПИСАНИЕ:", desc, "", "ТАГОВЕ:", ", ".join(yt["tags"]), "",
+            f"Субтитри за качване: Master.srt   |   Thumbnail: {', '.join(thumbs)}", ""]
     for s in shorts:
-        txt += [sep, f"{s['file']}  ({s['duration']:.0f}s)", sep, "ЗАГЛАВИЕ:", s["title"], "",
-                "ОПИСАНИЕ:", s["description"], ""]
+        txt += [sep, f"{s['file']}  ({s['duration']:.0f}s)  –  YouTube Shorts / TikTok", sep, "ЗАГЛАВИЕ:", s["title"],
+                "", "ОПИСАНИЕ:", s["description"], ""]
     (out_dir / "metadata.txt").write_text("\n".join(txt), encoding="utf-8")
-
-    th = data.get("thumbnail") or {}
-    i = data["_index"].get(th.get("scene_id"), 0)
-    make_thumbnail(images[i], th.get("text", ""), out_dir / "thumbnail.jpg", cfg)
     return meta
