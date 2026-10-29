@@ -23,11 +23,13 @@ from modules.image_engine import generate_images, generate_thumbnail_images
 from modules.master_builder import build_master_audio, concat_clips, render_master, render_scene_clips
 from modules.metadata_engine import write_metadata
 from modules.pronunciation import Lexicon, load_global, report
+from modules.report import RunReport, keep_awake
 from modules.shorts_clipper import build_shorts
 from modules.subtitles import write_master_subs
 from modules.timeline import build_timeline
 from modules.utils import check_dependencies, ensure_dir, fmt_ts, log, setup_logging
 from modules.validator import ScriptError, load_script
+from modules.verify import verify
 from modules.video_engine import render_motion_clips
 
 
@@ -102,47 +104,57 @@ def main() -> int:
         return 0
 
     check_dependencies(cfg)
-    t_start = time.time()
+    keep_awake(long_run=cfg.motion_engine == "ltx")
+    rep = RunReport()
     out_dir = ensure_dir(cfg.output_dir / data["project_name"])
     work = ensure_dir(out_dir / "_work")
 
-    log.info("━━ [1/6] Глас")
-    audio = generate_audio(scenes, work, cfg, a.force, lexicon)
+    with rep.stage("[1/6] Глас"):
+        audio = generate_audio(scenes, work, cfg, a.force, lexicon)
 
-    log.info("━━ [2/6] Изображения")
-    images = generate_images(scenes, work, cfg, a.force, data["characters"])
-    thumb_images = generate_thumbnail_images(data, work, cfg, a.force)
+    with rep.stage("[2/6] Изображения"):
+        images = generate_images(scenes, work, cfg, a.force, data["characters"])
+        thumb_images = generate_thumbnail_images(data, work, cfg, a.force)
 
-    log.info("━━ [3/6] Времева линия + аудио микс")
-    tl = build_timeline(scenes, audio, work, cfg)
-    master_audio, music = build_master_audio(tl, work, cfg, seed=data["project_name"])
-    log.info("   Обща дължина: %s", fmt_ts(tl["duration"]))
+    with rep.stage("[3/6] Времева линия + аудио микс"):
+        tl = build_timeline(scenes, audio, work, cfg)
+        master_audio, music = build_master_audio(tl, work, cfg, seed=data["project_name"])
+        log.info("   Обща дължина: %s", fmt_ts(tl["duration"]))
 
     if cfg.motion_engine == "ltx":
-        log.info("━━ [4/6] Видео клипове (LTX-2.5, %dx%d @ %d fps)", cfg.ltx_width, cfg.ltx_height, cfg.fps)
-        clips = render_motion_clips(scenes, tl, images, work, cfg, data["characters"], a.force)
+        with rep.stage(f"[4/6] Видео клипове (LTX-2.5, {cfg.ltx_width}x{cfg.ltx_height} @ {cfg.fps} fps)"):
+            clips = render_motion_clips(scenes, tl, images, work, cfg, data["characters"], a.force, rep.ltx)
     else:
-        log.info("━━ [4/6] Клипове с Ken Burns")
-        clips = render_scene_clips(scenes, tl, images, work, cfg, a.force)
+        with rep.stage("[4/6] Клипове с Ken Burns"):
+            clips = render_scene_clips(scenes, tl, images, work, cfg, a.force)
 
-    log.info("━━ [5/6] Рендер на мастър видеото")
-    words = [w for t in tl["scenes"] for w in t["words"]]
-    ass = work / "master.ass"
-    write_master_subs(words, ass, out_dir / "Master.srt", cfg)
-    video = concat_clips(clips, work / "master_video.mp4")
-    render_master(video, master_audio, ass if cfg.burn_subs_master else None, out_dir / "Master.mp4", cfg)
-    log.info("🎬 Master.mp4 готов")
+    with rep.stage("[5/6] Рендер на мастър видеото"):
+        words = [w for t in tl["scenes"] for w in t["words"]]
+        ass = work / "master.ass"
+        write_master_subs(words, ass, out_dir / "Master.srt", cfg)
+        video = concat_clips(clips, work / "master_video.mp4")
+        render_master(video, master_audio, ass if cfg.burn_subs_master else None, out_dir / "Master.mp4", cfg)
+        log.info("🎬 Master.mp4 готов")
 
     shorts = []
     if not a.no_shorts and data.get("shorts"):
-        log.info("━━ [6/6] Shorts (%s)", cfg.shorts_layout)
-        shorts = build_shorts(data, tl, clips, master_audio, work, out_dir, cfg)
+        with rep.stage(f"[6/6] Shorts ({cfg.shorts_layout})"):
+            shorts = build_shorts(data, tl, clips, master_audio, work, out_dir, cfg)
 
     write_metadata(data, scenes, tl, shorts, images, out_dir, cfg, music=music, thumb_images=thumb_images)
     if a.clean:
         shutil.rmtree(work, ignore_errors=True)
 
-    log.info("✅ Готово за %.0fs -> %s", time.time() - t_start, out_dir.resolve())
+    log.info("🔎 Проверка на готовите файлове...")
+    try:
+        check = verify(out_dir)
+    except Exception as e:  # проверката никога не проваля вече готовия рън
+        check = (False, [f"  FAIL проверката не успя: {e}"])
+    for line in check[1]:
+        if not line.startswith("  PASS"):
+            (log.info if check[0] else log.warning)("   %s", line)
+    report_path = rep.write(out_dir, data, cfg, music, check)
+    log.info("✅ Готово за %.0fs -> %s  (отчет: %s)", time.time() - rep.t0, out_dir.resolve(), report_path.name)
     for f in sorted(out_dir.iterdir()):
         if f.is_file() and not f.name.startswith("."):
             log.info("   %-16s %6.1f MB", f.name, f.stat().st_size / 1e6)

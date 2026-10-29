@@ -79,9 +79,10 @@ def _keyframe(img: Path, out_dir: Path, cfg) -> Path:
     return out
 
 
-def _run_worker(spec: dict, spec_path: Path, cfg) -> None:
+def _run_worker(spec: dict, spec_path: Path, cfg, stats: dict) -> None:
     spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=1))
     todo = [j for j in spec["jobs"] if not Path(j["out"]).exists()]
+    stats.update(shots=len(spec["jobs"]), generated=len(todo), compute=0.0, video_sec=0.0)
     if not todo:
         return
     total_frames = sum(j["frames"] for j in todo)
@@ -101,6 +102,8 @@ def _run_worker(spec: dict, spec_path: Path, cfg) -> None:
         ev = json.loads(line[6:])
         if ev["event"] == "done":
             done_frames += ev["frames"]
+            stats["compute"] += ev["seconds"]
+            stats["video_sec"] += ev["frames"] / cfg.fps
             rate = (time.time() - t0) / done_frames
             log.info("🎥 %s: %.0fs (%.1f s/секунда видео)  |  %d/%d кадъра, остават ~%s", ev["id"], ev["seconds"],
                      ev["seconds"] / (ev["frames"] / cfg.fps), done_frames, total_frames,
@@ -110,7 +113,10 @@ def _run_worker(spec: dict, spec_path: Path, cfg) -> None:
 
 
 def render_motion_clips(scenes: list[dict], timeline: dict, images: list[Path], work: Path, cfg,
-                        characters: dict | None = None, force: bool = False) -> list[Path]:
+                        characters: dict | None = None, force: bool = False,
+                        stats: dict | None = None) -> list[Path]:
+    """stats (по желание) се попълва с броя shots, колко са генерирани сега и времето им (за render_report.md)."""
+    stats = {} if stats is None else stats
     if not Path(cfg.ltx_python).exists():
         raise SystemExit(f"❌ Липсва LTX средата ({cfg.ltx_python}). Инсталирайте я (README, т.2) "
                          f"или ползвайте --motion kenburns")
@@ -141,7 +147,7 @@ def render_motion_clips(scenes: list[dict], timeline: dict, images: list[Path], 
         per_scene.append((sc, t, shots))
 
     _run_worker({"model_dir": str(_model_dir(cfg)), "low_ram": cfg.ltx_low_ram, "jobs": jobs},
-                mdir / "jobs.json", cfg)
+                mdir / "jobs.json", cfg, stats)
 
     clips = []
     for sc, t, shots in per_scene:

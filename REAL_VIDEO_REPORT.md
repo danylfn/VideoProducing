@@ -11,7 +11,6 @@ The pipeline now produces real video, not a slideshow. Every scene is animated b
 | **Finished episode** | [output/darius_hand_of_noxus/](output/darius_hand_of_noxus/): `Master.mp4` (1920×1080, 30 fps, 11:04, -14.1 LUFS, with music), 6 Shorts (29–51 s, 1080×1920, new `zoom` layout), 3 thumbnail variants, 2 extra title variants, SRT, 8 chapters, music credits in the description |
 | **Time for one 11-minute episode** | **~9 hours** of compute: video 8.0 h, images 53 min, everything else ~10 min. Your limit was 10 h. |
 | **Checks** | `tools/verify_output.py`: **ALL PASS**. No frozen stretches in 11 minutes. Shot joins are smooth after a fix (§6). |
-| **Old version for comparison** | [output/darius_hand_of_noxus_kenburns/](output/darius_hand_of_noxus_kenburns/): the same episode as image + zoom/pan |
 
 ## 2. Goal and constraints
 
@@ -125,7 +124,7 @@ What the pipeline does **not** do on its own (these were done by me in this sess
 
 ## 11. Open decisions
 
-- **Ken Burns version** (`output/darius_hand_of_noxus_kenburns/`, 1.0 GB): keep it for comparison, or delete it?
-- **Offered, not yet built:** keep-awake protection built into the pipeline, and an automatic per-episode `render_report.md`.
+- The Ken Burns version of the episode was deleted on request (30 October 2026).
+- Keep-awake protection and an automatic per-episode `render_report.md` were added afterwards (see README §5).
 - **Possible next upgrades** (each needs your approval): test another voice (e.g. Chatterbox), YouTube auto-upload via the API, an analytics feedback loop, 4K upload.
 - Two empty folders from the earlier model search (`models--mlx-community--ltx-2.5-mlx-*` in `~/.cache/huggingface/hub`, a few KB) can be deleted; they do no harm.
