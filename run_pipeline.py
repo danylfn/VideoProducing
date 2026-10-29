@@ -32,7 +32,7 @@ from modules.video_engine import render_motion_clips
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="LoL Lore -> 10-мин YouTube видео + 3 Shorts")
+    p = argparse.ArgumentParser(description="LoL Lore -> 10-мин YouTube видео + Shorts")
     p.add_argument("--input", "-i", default="script.json", type=Path)
     p.add_argument("--tts", choices=["kokoro", "say", "silent", "elevenlabs"])
     p.add_argument("--images", choices=["mflux", "comfyui", "placeholder", "fal", "replicate"])

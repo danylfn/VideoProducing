@@ -5,7 +5,8 @@
      сцената, следващите продължават от последния кадър на предишния.
   2. Генерирането става в tools/ltx_worker.py в отделната среда .venv-ltx: моделът се зарежда веднъж за всички
      сцени. Всеки кадър се кешира по хеш (промпт, картина, дължина, seed) -> прекъснат рън продължава.
-  3. Кадрите на сцената се залепват, режат се до точния брой кадри от времевата линия и се мащабират до
+  3. Кадрите на сцената се залепват цели (без дублирания първи кадър на продълженията), последният се реже до
+     точния брой кадри от времевата линия и всичко се мащабира до
      резолюцията на мастъра -> останалата част от пайплайна (мастър, субтитри, Shorts) не се променя.
 """
 from __future__ import annotations
@@ -36,7 +37,8 @@ def _grid(frames: int) -> int:
 
 def plan_shots(frames: int, max_frames: int) -> list[tuple[int, int]]:
     """Връща [(нужни кадри, кадри за генериране)] за всеки shot на сцената.
-    Shot k>0 започва с последния кадър на предишния, затова той се генерира с 1 кадър повече и се изрязва."""
+    Shot k>0 започва с последния кадър на предишния, затова той се генерира с 1 кадър повече и се изрязва.
+    При залепването shot-овете се ползват изцяло (иначе на шева се прескачат кадри); реже се само краят на последния."""
     n = 1
     while True:
         base, extra = divmod(frames, n)
@@ -143,14 +145,16 @@ def render_motion_clips(scenes: list[dict], timeline: dict, images: list[Path], 
 
     clips = []
     for sc, t, shots in per_scene:
-        key = short_hash([s["key"] for s in shots], t["frames"], cfg.width, cfg.height, cfg.fps, "v1")
+        key = short_hash([s["key"] for s in shots], t["frames"], cfg.width, cfg.height, cfg.fps, "v2")
         out = mdir / f"scene_{sc['scene_id']:03d}_{key}.mp4"
         if force or not out.exists():
             inputs, chains = [], []
             for k, s in enumerate(shots):
                 inputs += ["-i", s["out"]]
+                # Shot-ът се ползва ЦЯЛ: следващият продължава от последния му генериран кадър, затова рязане
+                # в средата дава скок. Излишъкът се реже само от края на последния shot (-frames:v отдолу).
                 skip = 1 if k else 0  # първият кадър на продължението = последният на предишния shot
-                chains.append(f"[{k}:v]trim=start_frame={skip}:end_frame={skip + s['need']},setpts=PTS-STARTPTS[v{k}]")
+                chains.append(f"[{k}:v]trim=start_frame={skip},setpts=PTS-STARTPTS[v{k}]")
             cat = "".join(f"[v{k}]" for k in range(len(shots)))
             fc = (";".join(chains) + f";{cat}concat=n={len(shots)}:v=1:a=0,"
                   f"tpad=stop_mode=clone:stop=-1,scale={cfg.width}:{cfg.height}:flags=lanczos,"
