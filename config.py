@@ -58,6 +58,18 @@ class Config:
     kb_zoom: float = 1.08
     kb_modes: tuple = ("zoom_in", "pan_right", "zoom_out", "pan_left")
 
+    # ---------- Движение: kenburns (картина + zoom/pan) | ltx (истинско видео, LTX-2.5 локално) ----------
+    motion_engine: str = field(default_factory=lambda: _env("MOTION_ENGINE", "kenburns"))
+    ltx_model: str = field(default_factory=lambda: _env("LTX_MODEL", "dgrauet/ltx-2.5-mlx-q8"))
+    ltx_python: Path = field(default_factory=lambda: BASE_DIR / _env("LTX_PYTHON", ".venv-ltx/bin/python"))
+    ltx_width: int = field(default_factory=lambda: _env_int("LTX_WIDTH", 1024))     # кратно на 64
+    ltx_height: int = field(default_factory=lambda: _env_int("LTX_HEIGHT", 576))    # кратно на 64
+    # бенчмарк (M5 Pro): ~38 s/секунда видео при shots до ~5 s; 11.8 s shot = ~51 s/секунда (атенцията расте квадратично)
+    ltx_max_shot_sec: float = field(default_factory=lambda: _env_float("LTX_MAX_SHOT_SEC", 5.0))
+    ltx_low_ram: bool = field(default_factory=lambda: _env("LTX_LOW_RAM", "0") == "1")
+    ltx_style: str = field(default_factory=lambda: _env(
+        "LTX_STYLE", "Dark fantasy digital painting style, cinematic lighting"))
+
     # ---------- Аудио ----------
     sample_rate: int = 48000             # 48000/30fps = 1600 семпъла на кадър -> перфектен синхрон
     scene_lead_sec: float = 0.12         # тишина преди репликата
@@ -151,5 +163,9 @@ class Config:
             self.width, self.height = 1920, 1080
         if self.sample_rate % self.fps:
             raise ValueError("sample_rate трябва да се дели на fps без остатък")
+        if self.motion_engine not in ("kenburns", "ltx"):
+            raise SystemExit(f"❌ MOTION_ENGINE трябва да е kenburns или ltx, не '{self.motion_engine}'")
+        if self.ltx_width % 64 or self.ltx_height % 64:
+            raise SystemExit("❌ LTX_WIDTH и LTX_HEIGHT трябва да са кратни на 64")
         self.output_dir = Path(self.output_dir)
         return self

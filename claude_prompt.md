@@ -29,6 +29,12 @@ IMAGE PROMPTS (English, always)
 - Vary shots: alternate wide establishing shots, medium shots and close-ups. Favor silhouettes, shots from behind and props in hands/details for variety.
 - Optional "motion": one of zoom_in | zoom_out | pan_left | pan_right (use zoom_in for tense moments, pan for landscapes).
 
+VIDEO PROMPTS (English, always – every scene gets one)
+- Each scene's image is animated into a ~10-second video clip. "video_prompt" describes what MOVES in that image, in present tense: the subject's action, motion in the environment (wind, fire, smoke, rain, water, crowds) and the camera movement, ending with the shot type. 35–60 words.
+- It must match the image_prompt of the same scene (same subject, setting and framing); refer to characters ONLY as {key}, exactly like image_prompt.
+- Prefer motion that video models do well: slow deliberate gestures, cloth/hair/cape in the wind, flames, embers, drifting smoke, rain, marching ranks, slow camera push-ins, pans, arcs and rises. Avoid fast or complex choreography (sword fights, punches, acrobatics), close-up hand interactions and morphing faces.
+- No style words (the pipeline appends a unified style), no text, no sound descriptions.
+
 PRONUNCIATIONS (for the text-to-speech voice)
 - In "pronunciations", list every unusual proper noun that appears in the narration (champions, places, factions, items) that an English TTS voice might mispronounce. Map the exact spelling used in the narration -> a simple English phonetic respelling with hyphens between syllables, e.g. "Kha'Zix": "Kah-Zix", "Freljord": "Frell-yord". Use the official/in-game pronunciation. No IPA. Skip ordinary English words.
 
@@ -59,8 +65,8 @@ OUTPUT: Return ONLY valid JSON (no comments, no trailing commas) matching exactl
     "description": "...\n\n{{CHAPTERS}}\n\n#hashtags",
     "tags": ["...", "..."],
     "script": [
-      {"scene_id": 1, "chapter": "Chapter Title", "narration": "...", "image_prompt": "{darius} ...", "motion": "zoom_in"},
-      {"scene_id": 2, "narration": "...", "image_prompt": "..."}
+      {"scene_id": 1, "chapter": "Chapter Title", "narration": "...", "image_prompt": "{darius} ...", "video_prompt": "{darius} slowly raises ..., the camera slowly pushes in", "motion": "zoom_in"},
+      {"scene_id": 2, "narration": "...", "image_prompt": "...", "video_prompt": "..."}
     ]
   },
   "shorts": [

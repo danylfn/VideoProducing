@@ -1,6 +1,6 @@
 # Python
 .venv/
-.venv-video/
+.venv-ltx/
 __pycache__/
 *.pyc
 

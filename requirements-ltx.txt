@@ -1,0 +1,5 @@
+# Истинско видео (LTX-2.5 image-to-video, MLX). Инсталира се в ОТДЕЛНА среда .venv-ltx (виж README, т.2).
+# ltx-2-mlx v0.18.0, закрепен на прегледания commit.
+ltx-core-mlx @ git+https://github.com/dgrauet/ltx-2-mlx.git@14a3ddd6054736beb45b4d836135fa4d44490531#subdirectory=packages/ltx-core-mlx
+ltx-pipelines-mlx @ git+https://github.com/dgrauet/ltx-2-mlx.git@14a3ddd6054736beb45b4d836135fa4d44490531#subdirectory=packages/ltx-pipelines-mlx
+pillow>=10.4,<13        # Pillow 13 е несъвместим с Python 3.12

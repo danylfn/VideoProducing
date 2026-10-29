@@ -79,6 +79,8 @@ def load_script(path: Path, cfg) -> dict:
             errors.append(f"Сцена {sid}: празно 'narration'")
         if not str(sc.get("image_prompt", "")).strip():
             errors.append(f"Сцена {sid}: празно 'image_prompt'")
+        if "video_prompt" in sc and not (isinstance(sc["video_prompt"], str) and sc["video_prompt"].strip()):
+            errors.append(f"Сцена {sid}: 'video_prompt' трябва да е непразен текст (или да липсва)")
         if sc.get("motion") and sc["motion"] not in cfg.kb_modes:
             warns.append(f"Сцена {sid}: непознат motion '{sc['motion']}' – ще се избере автоматично")
             sc.pop("motion")
@@ -104,7 +106,7 @@ def load_script(path: Path, cfg) -> dict:
     from .image_engine import CHAR_REF, full_prompt
     used_chars = set()
     for sc in scenes:
-        for ref in CHAR_REF.findall(sc["image_prompt"]):
+        for ref in CHAR_REF.findall(sc["image_prompt"] + " " + sc.get("video_prompt", "")):
             if ref.lower() not in chars:
                 errors.append(f"Сцена {sc['scene_id']}: {{{ref}}} не е дефиниран в 'characters'")
             used_chars.add(ref.lower())
@@ -121,6 +123,10 @@ def load_script(path: Path, cfg) -> dict:
                          f"краят (стилът) може да се загуби")
     for key in set(chars) - used_chars:
         warns.append(f"Героят '{key}' не се ползва в нито една сцена")
+    no_vp = [sc["scene_id"] for sc in scenes if not sc.get("video_prompt")]
+    if cfg.motion_engine == "ltx" and no_vp:
+        warns.append(f"{len(no_vp)} сцени без 'video_prompt' (напр. {no_vp[:5]}) – ще получат общо описание на "
+                     f"движението; собствен video_prompt дава много по-добро видео")
     data["characters"] = chars
 
     # ---- произношение

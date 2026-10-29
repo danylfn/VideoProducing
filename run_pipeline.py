@@ -28,6 +28,7 @@ from modules.subtitles import write_master_subs
 from modules.timeline import build_timeline
 from modules.utils import check_dependencies, ensure_dir, fmt_ts, log, setup_logging
 from modules.validator import ScriptError, load_script
+from modules.video_engine import render_motion_clips
 
 
 def parse_args() -> argparse.Namespace:
@@ -35,6 +36,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--input", "-i", default="script.json", type=Path)
     p.add_argument("--tts", choices=["kokoro", "say", "silent", "elevenlabs"])
     p.add_argument("--images", choices=["mflux", "comfyui", "placeholder", "fal", "replicate"])
+    p.add_argument("--motion", choices=["kenburns", "ltx"], help="kenburns = картина + zoom/pan, ltx = истинско видео")
     p.add_argument("--dry-run", action="store_true", help="placeholder картини + macOS 'say' (без API разходи)")
     p.add_argument("--check", action="store_true", help="само валидация и оценка")
     p.add_argument("--preview", metavar="ТЕКСТ", help="озвучава само този текст (за настройка на глас/произношение)")
@@ -57,6 +59,9 @@ def main() -> int:
     if a.dry_run:
         cfg.tts_engine = "say" if platform.system() == "Darwin" else "silent"
         cfg.image_engine = "placeholder"
+        cfg.motion_engine = "kenburns"
+    if a.motion:
+        cfg.motion_engine = a.motion
     if a.tts:
         cfg.tts_engine = a.tts
     if a.images:
@@ -86,8 +91,9 @@ def main() -> int:
     scenes = data["youtube_master"]["script"]
     log.info("📜 %s: %d сцени, %d думи, ~%.1f мин, %d shorts", data["project_name"], st["scenes"],
              st["words"], st["est_minutes"], len(data.get("shorts", [])))
-    log.info("   TTS: %s (%d символа)  |  Картини: %s (%d бр.)  |  %dx%d, %s",
-             cfg.tts_engine, st["chars"], cfg.image_engine, st["scenes"], cfg.width, cfg.height, cfg.video_encoder)
+    log.info("   TTS: %s (%d символа)  |  Картини: %s (%d бр.)  |  Движение: %s  |  %dx%d, %s",
+             cfg.tts_engine, st["chars"], cfg.image_engine, st["scenes"], cfg.motion_engine, cfg.width, cfg.height,
+             cfg.video_encoder)
     lexicon = Lexicon.build(load_global(cfg.pronunciations_file), data["pronunciations"])
     report(lexicon, [s["narration"] for s in scenes])
     if data["characters"]:
@@ -111,8 +117,12 @@ def main() -> int:
     master_audio = build_master_audio(tl, work, cfg, seed=data["project_name"])
     log.info("   Обща дължина: %s", fmt_ts(tl["duration"]))
 
-    log.info("━━ [4/6] Клипове с Ken Burns")
-    clips = render_scene_clips(scenes, tl, images, work, cfg, a.force)
+    if cfg.motion_engine == "ltx":
+        log.info("━━ [4/6] Видео клипове (LTX-2.5, %dx%d @ %d fps)", cfg.ltx_width, cfg.ltx_height, cfg.fps)
+        clips = render_motion_clips(scenes, tl, images, work, cfg, data["characters"], a.force)
+    else:
+        log.info("━━ [4/6] Клипове с Ken Burns")
+        clips = render_scene_clips(scenes, tl, images, work, cfg, a.force)
 
     log.info("━━ [5/6] Рендер на мастър видеото")
     words = [w for t in tl["scenes"] for w in t["words"]]
