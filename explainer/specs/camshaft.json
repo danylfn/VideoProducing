@@ -1,0 +1,23 @@
+{
+  "project_name": "how_a_camshaft_works",
+  "scene": "camshaft",
+  "title": "How a Camshaft Works",
+  "voice_speed": 1.05,
+  "narration": [
+    "This is a camshaft. It decides when your engine breathes.",
+    "As it spins, each lobe pushes a valve open against its spring.",
+    "Past the peak, the spring snaps it shut, and each cylinder takes its turn.",
+    "It turns at half crankshaft speed: one opening per valve, every four strokes."
+  ],
+  "description": "How a camshaft opens and closes your engine's valves, shown on an accurate 3D model of an overhead camshaft with bucket tappets (shown in slow motion). #shorts #cars #engine #mechanic #howitworks",
+  "tags": [
+    "camshaft",
+    "how a camshaft works",
+    "engine",
+    "valvetrain",
+    "car mechanics",
+    "how it works",
+    "overhead camshaft",
+    "valves"
+  ]
+}

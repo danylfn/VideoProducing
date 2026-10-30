@@ -112,7 +112,8 @@ def write_short_subs(words: list[dict], duration: float, title: str, ass_path: P
         lines.append(_event(0, duration, "Title", r"{\fad(250,0)}" + _wrap2(t, 22), layer=1))
 
     up = (lambda s: s.upper()) if cfg.subs_short_uppercase else (lambda s: s)
-    for c in chunk_words(words, max_chars=24, max_words=cfg.subs_short_max_words, max_dur=2.5):
+    # ~16 главни букви се побират в 1080 px при размер 88; повече излиза извън кадъра
+    for c in chunk_words(words, max_chars=16, max_words=cfg.subs_short_max_words, max_dur=2.5):
         ws = c["words"]
         if not cfg.subs_short_highlight:
             lines.append(_event(c["s"], c["e"], "Cap", _esc(up(" ".join(w["w"] for w in ws)))))
