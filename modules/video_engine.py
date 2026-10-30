@@ -1,13 +1,15 @@
 """
 Модул 4b: Истинско видео с движение (LTX-2.5 image-to-video, локално през MLX) вместо Ken Burns.
 
-  1. Всяка сцена се разделя на кадри (shots) с дължина до LTX_MAX_SHOT_SEC; първият тръгва от картината на
-     сцената, следващите продължават от последния кадър на предишния.
+  1. Всяка сцена се разделя на 2–3 shots (modules/shots.py) с твърди cut-ове. Всеки shot тръгва от СОБСТВЕНА
+     картина (с героите от библиотеката) – без верижно продължение от последния кадър, затова героите не се
+     променят от shot на shot, а камерата не „диша“ (zoom навътре, после навън).
   2. Генерирането става в tools/ltx_worker.py в отделната среда .venv-ltx: моделът се зарежда веднъж за всички
-     сцени. Всеки кадър се кешира по хеш (промпт, картина, дължина, seed) -> прекъснат рън продължава.
-  3. Кадрите на сцената се залепват цели (без дублирания първи кадър на продълженията), последният се реже до
-     точния брой кадри от времевата линия и всичко се мащабира до
-     резолюцията на мастъра -> останалата част от пайплайна (мастър, субтитри, Shorts) не се променя.
+     сцени. Всеки shot се кешира по хеш (промпт, картина, дължина, seed) -> прекъснат рън продължава.
+  3. Всеки нов shot минава автоматична проверка (modules/shot_check.py); при „дишащ“ zoom или рязък скок се
+     генерира наново с друг seed (SHOT_RETRIES пъти).
+  4. Shots на сцената се режат до точния брой кадри от времевата линия, залепват се, мащабират до резолюцията на
+     мастъра и получават леко филмово зърно -> останалата част от пайплайна (мастър, субтитри, Shorts) не се променя.
 """
 from __future__ import annotations
 
@@ -22,12 +24,14 @@ from pathlib import Path
 from PIL import Image, ImageOps
 
 from .image_engine import CHAR_REF
+from .shot_check import check_shot
+from .shots import scene_shots
 from .utils import ensure_dir, fmt_ts, log, run_ffmpeg, short_hash
 
 # Частите от модела, които distilled пайплайнът не ползва (~29.5 GB по-малко за теглене)
 LTX_SKIP = ["transformer-dev.safetensors", "*distilled-lora*"]
-DEFAULT_MOTION = ("The scene comes alive with subtle natural motion: wind moving cloth and hair, drifting smoke and "
-                  "embers, flickering light, slow cinematic camera push-in")
+DEFAULT_MOTION = ("The scene comes alive with natural motion: the subject breathes and shifts, wind moves cloth "
+                  "and hair, smoke and embers drift, light flickers")
 
 
 def _grid(frames: int) -> int:
@@ -35,23 +39,21 @@ def _grid(frames: int) -> int:
     return 8 * math.ceil(max(frames - 1, 8) / 8) + 1
 
 
-def plan_shots(frames: int, max_frames: int) -> list[tuple[int, int]]:
-    """Връща [(нужни кадри, кадри за генериране)] за всеки shot на сцената.
-    Shot k>0 започва с последния кадър на предишния, затова той се генерира с 1 кадър повече и се изрязва.
-    При залепването shot-овете се ползват изцяло (иначе на шева се прескачат кадри); реже се само краят на последния."""
-    n = 1
-    while True:
-        base, extra = divmod(frames, n)
-        need = [base + (1 if k < extra else 0) for k in range(n)]
-        plan = [(nk, _grid(nk + (1 if k else 0))) for k, nk in enumerate(need)]
-        if all(g <= max_frames for _, g in plan) or n >= frames:
-            return plan
-        n += 1
+def plan_episode(scenes: list[dict], timeline: dict, cfg) -> list[list[dict]]:
+    """Shots за всяка сцена: [[{"image_prompt", "video_prompt", "frames"}, ...], ...]."""
+    return [scene_shots(sc, t["frames"], cfg, DEFAULT_MOTION) for sc, t in zip(scenes, timeline["scenes"])]
 
 
-def video_prompt(scene: dict, cfg, characters: dict | None = None) -> str:
+def shot_image_items(scenes: list[dict], plan: list[list[dict]]) -> list[dict]:
+    """Картините за всички shots (в реда на plan), във формата на generate_images."""
+    return [{"scene_id": sc["scene_id"], "image_prompt": sh["image_prompt"],
+             "name": f"scene_{sc['scene_id']:03d}_s{k + 1}",
+             "label": f"Сцена {sc['scene_id']:3d} ({k + 1}/{len(shots)})"}
+            for sc, shots in zip(scenes, plan) for k, sh in enumerate(shots)]
+
+
+def video_prompt(text: str, cfg, characters: dict | None = None) -> str:
     chars = characters or {}
-    text = scene.get("video_prompt") or f"{scene['image_prompt'].rstrip(' ,.')}. {DEFAULT_MOTION}"
     text = " ".join(text.split()).rstrip(" ,.")
     text = CHAR_REF.sub(lambda m: chars.get(m.group(1).lower(), m.group(1).replace("_", " ")), text)
     if cfg.ltx_style and cfg.ltx_style.lower()[:20] not in text.lower():
@@ -79,14 +81,15 @@ def _keyframe(img: Path, out_dir: Path, cfg) -> Path:
     return out
 
 
-def _run_worker(spec: dict, spec_path: Path, cfg, stats: dict) -> None:
-    spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=1))
-    todo = [j for j in spec["jobs"] if not Path(j["out"]).exists()]
-    stats.update(shots=len(spec["jobs"]), generated=len(todo), compute=0.0, video_sec=0.0)
+def _run_worker(jobs: list[dict], spec_path: Path, cfg, stats: dict) -> None:
+    todo = [j for j in jobs if not Path(j["out"]).exists()]
     if not todo:
         return
+    spec_path.write_text(json.dumps({"model_dir": str(_model_dir(cfg)), "low_ram": cfg.ltx_low_ram, "jobs": todo},
+                                    ensure_ascii=False, indent=1))
+    stats["generated"] += len(todo)
     total_frames = sum(j["frames"] for j in todo)
-    log.info("🎥 LTX-2.5: %d кадъра за генериране (%.0f s видео при %d fps). Зареждам модела...",
+    log.info("🎥 LTX-2.5: %d shots за генериране (%.0f s видео при %d fps). Зареждам модела...",
              len(todo), total_frames / cfg.fps, cfg.fps)
     env = dict(os.environ, HF_HUB_OFFLINE="1")  # моделът е локален: никога не тегли целия пакет
     proc = subprocess.Popen([str(cfg.ltx_python), str(Path(__file__).resolve().parents[1] / "tools/ltx_worker.py"),
@@ -112,59 +115,90 @@ def _run_worker(spec: dict, spec_path: Path, cfg, stats: dict) -> None:
         raise RuntimeError("LTX worker грешка:\n" + "\n".join(tail) + "\n\nПуснете отново: готовите кадри са кеширани.")
 
 
-def render_motion_clips(scenes: list[dict], timeline: dict, images: list[Path], work: Path, cfg,
-                        characters: dict | None = None, force: bool = False,
+def render_motion_clips(scenes: list[dict], timeline: dict, plan: list[list[dict]], shot_images: list[list[Path]],
+                        work: Path, cfg, characters: dict | None = None, force: bool = False,
                         stats: dict | None = None) -> list[Path]:
-    """stats (по желание) се попълва с броя shots, колко са генерирани сега и времето им (за render_report.md)."""
+    """plan/shot_images: shots и картините им за всяка сцена (plan_episode + generate_images).
+    stats (по желание) се попълва за render_report.md: shots, генерирани сега, време, повторени от проверката."""
     stats = {} if stats is None else stats
+    stats.update(shots=sum(map(len, plan)), generated=0, compute=0.0, video_sec=0.0, retried=0, still_bad=[])
     if not Path(cfg.ltx_python).exists():
         raise SystemExit(f"❌ Липсва LTX средата ({cfg.ltx_python}). Инсталирайте я (README, т.2) "
                          f"или ползвайте --motion kenburns")
     mdir = ensure_dir(work / "motion")
     raw_dir, key_dir = ensure_dir(mdir / "raw"), ensure_dir(mdir / "keys")
-    max_frames = 8 * max(1, int((cfg.ltx_max_shot_sec * cfg.fps - 1) // 8)) + 1  # най-дългият 8k+1 <= лимита
     model_id = [cfg.ltx_model, cfg.ltx_width, cfg.ltx_height, cfg.fps]
+    negative = cfg.ltx_negative.strip() or None
+    shots = [(sc, k, len(sh_list), sh, img) for sc, sh_list, imgs in zip(scenes, plan, shot_images)
+             for k, (sh, img) in enumerate(zip(sh_list, imgs))]
 
-    jobs, per_scene = [], []
-    for sc, t, img in zip(scenes, timeline["scenes"], images):
-        prompt = video_prompt(sc, cfg, characters)
-        key_img = _keyframe(img, key_dir, cfg)
-        seed = int(short_hash(prompt, img.name), 16) % (2**31 - 1)
-        shots, prev = [], None
-        for k, (need, gen) in enumerate(plan_shots(t["frames"], max_frames)):
-            shot_seed = (seed + k) % (2**31 - 1)
-            key = short_hash("ltx", model_id, prompt, img.name, prev and prev["key"], gen, shot_seed)
-            out = raw_dir / f"scene_{sc['scene_id']:03d}_s{k + 1}_{key}.mp4"
-            if force and out.exists():
-                out.unlink()
-            job = {"id": f"Сцена {sc['scene_id']:3d}" + (f" ({k + 1})" if k or need < t["frames"] else ""),
-                   "prompt": prompt, "image": None if prev else str(key_img), "image_from": prev and prev["out"],
-                   "frames": gen, "width": cfg.ltx_width, "height": cfg.ltx_height, "fps": cfg.fps,
-                   "seed": shot_seed, "out": str(out), "key": key, "need": need}
-            jobs.append(job)
-            shots.append(job)
-            prev = job
-        per_scene.append((sc, t, shots))
+    def job(s, attempt: int) -> dict:
+        sc, k, n, sh, img = s
+        prompt = video_prompt(sh["video_prompt"], cfg, characters)
+        seed = (int(short_hash(prompt, img.name), 16) + 7919 * attempt) % (2**31 - 1)
+        gen = _grid(sh["frames"])
+        key = short_hash("ltx-shot", model_id, prompt, img.name, gen, seed, negative)
+        return {"id": f"Сцена {sc['scene_id']:3d} ({k + 1}/{n})" + (f" опит {attempt + 1}" if attempt else ""),
+                "prompt": prompt, "negative": negative, "image": str(_keyframe(img, key_dir, cfg)), "frames": gen,
+                "width": cfg.ltx_width, "height": cfg.ltx_height, "fps": cfg.fps, "seed": seed,
+                "out": str(raw_dir / f"scene_{sc['scene_id']:03d}_s{k + 1}_{key}.mp4"), "key": key,
+                "need": sh["frames"]}
 
-    _run_worker({"model_dir": str(_model_dir(cfg)), "low_ram": cfg.ltx_low_ram, "jobs": jobs},
-                mdir / "jobs.json", cfg, stats)
+    def bad(j: dict) -> dict | None:
+        res = check_shot(Path(j["out"]))
+        return None if res["ok"] else res
 
-    clips = []
-    for sc, t, shots in per_scene:
-        key = short_hash([s["key"] for s in shots], t["frames"], cfg.width, cfg.height, cfg.fps, "v2")
+    attempts = [0] * len(shots)
+    if force:
+        for s in shots:
+            Path(job(s, 0)["out"]).unlink(missing_ok=True)
+
+    def select() -> list[dict]:
+        """Текущият опит за всеки shot; прескача вече генерирани опити, които са се провалили на проверката."""
+        out = []
+        for i, s in enumerate(shots):
+            j = job(s, attempts[i])
+            while (cfg.shot_check and attempts[i] < cfg.shot_retries and Path(j["out"]).exists() and bad(j)):
+                attempts[i] += 1
+                j = job(s, attempts[i])
+            out.append(j)
+        return out
+
+    for _ in range(cfg.shot_retries + 1):
+        jobs = select()
+        _run_worker(jobs, mdir / "jobs.json", cfg, stats)
+        if not cfg.shot_check:
+            break
+        retry = [(i, j, r) for i, j in enumerate(jobs) if attempts[i] < cfg.shot_retries and (r := bad(j))]
+        for i, j, r in retry:
+            log.info("🔁 %s: %s -> нов опит с друг seed", j["id"], r["reason"])
+            attempts[i] += 1
+        stats["retried"] += len(retry)
+        if not retry:
+            break
+    jobs = select()
+    if cfg.shot_check:
+        for j in jobs:
+            if r := bad(j):
+                log.warning("⚠️  %s: %s (остава и след %d опита)", j["id"], r["reason"], cfg.shot_retries + 1)
+                stats["still_bad"].append(" ".join(j["id"].split()))
+
+    clips, i = [], 0
+    for sc, t, sh_list in zip(scenes, timeline["scenes"], plan):
+        sj, i = jobs[i:i + len(sh_list)], i + len(sh_list)
+        key = short_hash([s["key"] for s in sj], [s["need"] for s in sj], t["frames"], cfg.width, cfg.height,
+                         cfg.fps, cfg.film_grain, "v3")
         out = mdir / f"scene_{sc['scene_id']:03d}_{key}.mp4"
         if force or not out.exists():
             inputs, chains = [], []
-            for k, s in enumerate(shots):
+            for k, s in enumerate(sj):
                 inputs += ["-i", s["out"]]
-                # Shot-ът се ползва ЦЯЛ: следващият продължава от последния му генериран кадър, затова рязане
-                # в средата дава скок. Излишъкът се реже само от края на последния shot (-frames:v отдолу).
-                skip = 1 if k else 0  # първият кадър на продължението = последният на предишния shot
-                chains.append(f"[{k}:v]trim=start_frame={skip},setpts=PTS-STARTPTS[v{k}]")
-            cat = "".join(f"[v{k}]" for k in range(len(shots)))
-            fc = (";".join(chains) + f";{cat}concat=n={len(shots)}:v=1:a=0,"
+                chains.append(f"[{k}:v]trim=end_frame={s['need']},setpts=PTS-STARTPTS[v{k}]")
+            cat = "".join(f"[v{k}]" for k in range(len(sj)))
+            grain = f"noise=alls={cfg.film_grain:g}:allf=t," if cfg.film_grain > 0 else ""
+            fc = (";".join(chains) + f";{cat}concat=n={len(sj)}:v=1:a=0,"
                   f"tpad=stop_mode=clone:stop=-1,scale={cfg.width}:{cfg.height}:flags=lanczos,"
-                  f"unsharp=5:5:0.35:5:5:0,setsar=1,format=yuv420p[v]")
+                  f"unsharp=5:5:0.35:5:5:0,{grain}setsar=1,format=yuv420p[v]")
             tmp = out.with_suffix(".tmp.mp4")
             # същите параметри като Ken Burns клиповете -> безопасен concat без прекодиране
             run_ffmpeg([*inputs, "-filter_complex", fc, "-map", "[v]", "-frames:v", t["frames"], "-r", cfg.fps,

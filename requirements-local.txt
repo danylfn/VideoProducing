@@ -2,4 +2,5 @@
 -r requirements.txt
 kokoro>=0.9.4
 soundfile>=0.12
-mflux>=0.9
+mflux>=0.23              # FLUX.2-klein + референтни картини (библиотеката с герои)
+opencv-python>=4.8       # автоматичната проверка на видео shots (zoom)

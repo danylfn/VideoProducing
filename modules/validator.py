@@ -90,6 +90,20 @@ def load_script(path: Path, cfg) -> dict:
         seen.add(sid)
         if not str(sc.get("narration", "")).strip():
             errors.append(f"Сцена {sid}: празно 'narration'")
+        shots = sc.get("shots")
+        if shots is not None:
+            if not isinstance(shots, list) or not shots or not all(isinstance(x, dict) for x in shots):
+                errors.append(f"Сцена {sid}: 'shots' трябва да е непразен списък от {{\"image_prompt\", \"video_prompt\"}}")
+                sc.pop("shots")
+            else:
+                for k, sh in enumerate(shots, 1):
+                    for field in ("image_prompt", "video_prompt"):
+                        if not (isinstance(sh.get(field), str) and sh[field].strip()):
+                            errors.append(f"Сцена {sid}, shot {k}: празно '{field}'")
+                if len(shots) > 4:
+                    warns.append(f"Сцена {sid}: {len(shots)} shots – повече от ~3 правят кадрите под 2 s")
+                if not str(sc.get("image_prompt", "")).strip() and isinstance(shots[0].get("image_prompt"), str):
+                    sc["image_prompt"] = shots[0]["image_prompt"]  # за Ken Burns и резервния thumbnail
         if not str(sc.get("image_prompt", "")).strip():
             errors.append(f"Сцена {sid}: празно 'image_prompt'")
         if "video_prompt" in sc and not (isinstance(sc["video_prompt"], str) and sc["video_prompt"].strip()):
@@ -119,7 +133,9 @@ def load_script(path: Path, cfg) -> dict:
     from .image_engine import CHAR_REF, full_prompt
     used_chars = set()
     for sc in scenes:
-        for ref in CHAR_REF.findall(sc["image_prompt"] + " " + sc.get("video_prompt", "")):
+        texts = [sc["image_prompt"], sc.get("video_prompt", "")]
+        texts += [str(sh.get(f, "")) for sh in sc.get("shots", []) for f in ("image_prompt", "video_prompt")]
+        for ref in CHAR_REF.findall(" ".join(texts)):
             if ref.lower() not in chars:
                 errors.append(f"Сцена {sc['scene_id']}: {{{ref}}} не е дефиниран в 'characters'")
             used_chars.add(ref.lower())
@@ -136,10 +152,24 @@ def load_script(path: Path, cfg) -> dict:
                          f"краят (стилът) може да се загуби")
     for key in set(chars) - used_chars:
         warns.append(f"Героят '{key}' не се ползва в нито една сцена")
-    no_vp = [sc["scene_id"] for sc in scenes if not sc.get("video_prompt")]
-    if cfg.motion_engine == "ltx" and no_vp:
-        warns.append(f"{len(no_vp)} сцени без 'video_prompt' (напр. {no_vp[:5]}) – ще получат общо описание на "
-                     f"движението; собствен video_prompt дава много по-добро видео")
+    if cfg.motion_engine == "ltx":
+        from .shots import STRONG_MOVES, camera_move
+        no_vp = [sc["scene_id"] for sc in scenes if not sc.get("video_prompt") and not sc.get("shots")]
+        if no_vp:
+            warns.append(f"{len(no_vp)} сцени без 'video_prompt'/'shots' (напр. {no_vp[:5]}) – ще получат общо описание "
+                         f"на движението; собствени shots дават много по-добро видео")
+        strong, repeat = [], []
+        for sc in scenes:
+            vps = [sh["video_prompt"] for sh in sc.get("shots", [])] or [sc.get("video_prompt", "")]
+            strong += [sc["scene_id"] for vp in vps if STRONG_MOVES.search(vp)]
+            moves = [camera_move(vp) for vp in vps]
+            repeat += [sc["scene_id"] for a, b in zip(moves, moves[1:]) if a and a == b and a != "static"]
+        if strong:
+            warns.append(f"{len(strong)} shots със силно движение (crane/dolly/zoom/fast…), напр. сцени "
+                         f"{sorted(set(strong))[:6]} – LTX го преиграва; ползвайте бавни push-in/truck/arc/handheld")
+        if repeat:
+            warns.append(f"Едно и също движение на камерата два пъти подред в сцени {sorted(set(repeat))[:6]} – "
+                         f"сменете го (напр. push-in -> truck -> arc)")
     data["characters"] = chars
 
     # ---- произношение

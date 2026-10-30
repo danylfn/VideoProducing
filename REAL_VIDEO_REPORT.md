@@ -128,3 +128,18 @@ What the pipeline does **not** do on its own (these were done by me in this sess
 - Keep-awake protection and an automatic per-episode `render_report.md` were added afterwards (see README §5).
 - **Possible next upgrades** (each needs your approval): test another voice (e.g. Chatterbox), YouTube auto-upload via the API, an analytics feedback loop, 4K upload.
 - Two empty folders from the earlier model search (`models--mlx-community--ltx-2.5-mlx-*` in `~/.cache/huggingface/hub`, a few KB) can be deleted; they do no harm.
+
+## 12. Upgrade (30 October 2026): smoother, consistent, less AI-looking video
+
+You reported four problems after watching the episode: weird zoom in/out, characters changing from frame to frame, an AI-generated look, and too little dynamism. Analysis of all 176 shots and a prototype on scenes 7 and 15 led to these permanent pipeline changes (they apply to every future episode):
+
+| Problem | Cause found | Fix in the pipeline |
+|---|---|---|
+| Weird zoom in/out | Each scene was one long clip in 3 chained parts with the same "push in" prompt; in 36 scenes the zoom went in, out and in again (±40–100%). | 2–3 **shots per scene with hard cuts** ([modules/shots.py](modules/shots.py)), one gentle camera move per shot, never repeated; NAG negative prompt; **automatic shot check** ([modules/shot_check.py](modules/shot_check.py)) that regenerates shots that zoom back and forth, jump or zoom more than 30%. |
+| Characters change | Each part continued from the previous part's last frame, so errors accumulated; images were made from text only. | **Character library**: one reference portrait per character in `characters/` (shared across episodes); every image with `{character}` is generated from it (FLUX.2-klein reference images). No chaining. |
+| AI look | "digital painting … highly detailed" style, which also produced fake signatures. | New default style: live-action 35mm film still, muted colours, natural light, no modern objects; light film grain in post. |
+| Not dynamic | Little real action; most "motion" was zoom breathing. | Cuts every ~4 s, clear subject actions, camera moves from a tested list; Claude's prompt now writes the shots (`claude_prompt.md`); `--check` warns about strong moves (crane, dolly, zoom). |
+
+**Measured in tests:** zoom per shot fell from ±40–100% to 0–25% in one direction; faces and costumes stay the same across wide/medium/close-up shots; images take 7–13 s at 1024×576 (was 48 s at 1920×1088). One tuning step mattered: a "frozen / no motion" negative made the model overshoot (4 of 6 shots zoomed 35–80%), so it is not in the default. The shot check was calibrated on 34 shots: every bad shot from the first version fails, smooth push-ins up to ~25% pass.
+
+**Estimated time per 11-minute episode:** ~9–9.7 h (≈171 shots, ~8.2 h of video generation). The Darius episode has not been re-rendered with the new system yet.

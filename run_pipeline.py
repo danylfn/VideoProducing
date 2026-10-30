@@ -30,7 +30,7 @@ from modules.timeline import build_timeline
 from modules.utils import check_dependencies, ensure_dir, fmt_ts, log, setup_logging
 from modules.validator import ScriptError, load_script
 from modules.verify import verify
-from modules.video_engine import render_motion_clips
+from modules.video_engine import plan_episode, render_motion_clips, shot_image_items
 
 
 def parse_args() -> argparse.Namespace:
@@ -93,9 +93,10 @@ def main() -> int:
     scenes = data["youtube_master"]["script"]
     log.info("📜 %s: %d сцени, %d думи, ~%.1f мин, %d shorts", data["project_name"], st["scenes"],
              st["words"], st["est_minutes"], len(data.get("shorts", [])))
-    log.info("   TTS: %s (%d символа)  |  Картини: %s (%d бр.)  |  Движение: %s  |  %dx%d, %s",
-             cfg.tts_engine, st["chars"], cfg.image_engine, st["scenes"], cfg.motion_engine, cfg.width, cfg.height,
-             cfg.video_encoder)
+    log.info("   TTS: %s (%d символа)  |  Картини: %s (%s)  |  Движение: %s  |  %dx%d, %s",
+             cfg.tts_engine, st["chars"], cfg.image_engine,
+             "по 1 на shot, 2–3 на сцена" if cfg.motion_engine == "ltx" else f"{st['scenes']} бр.",
+             cfg.motion_engine, cfg.width, cfg.height, cfg.video_encoder)
     lexicon = Lexicon.build(load_global(cfg.pronunciations_file), data["pronunciations"])
     report(lexicon, [s["narration"] for s in scenes])
     if data["characters"]:
@@ -112,18 +113,28 @@ def main() -> int:
     with rep.stage("[1/6] Глас"):
         audio = generate_audio(scenes, work, cfg, a.force, lexicon)
 
-    with rep.stage("[2/6] Изображения"):
-        images = generate_images(scenes, work, cfg, a.force, data["characters"])
-        thumb_images = generate_thumbnail_images(data, work, cfg, a.force)
-
-    with rep.stage("[3/6] Времева линия + аудио микс"):
+    with rep.stage("[2/6] Времева линия + аудио микс"):
         tl = build_timeline(scenes, audio, work, cfg)
         master_audio, music = build_master_audio(tl, work, cfg, seed=data["project_name"])
         log.info("   Обща дължина: %s", fmt_ts(tl["duration"]))
 
+    with rep.stage("[3/6] Изображения"):
+        if cfg.motion_engine == "ltx":  # по картина за всеки shot, направо в размера на видео модела
+            plan = plan_episode(scenes, tl, cfg)
+            log.info("   %d shots в %d сцени (средно %.1f s)", sum(map(len, plan)), len(plan),
+                     tl["duration"] / sum(map(len, plan)))
+            flat = iter(generate_images(shot_image_items(scenes, plan), work, cfg, a.force, data["characters"],
+                                        size=(cfg.ltx_width, cfg.ltx_height)))
+            shot_images = [[next(flat) for _ in shots] for shots in plan]
+            images = [imgs[0] for imgs in shot_images]
+        else:
+            images = generate_images(scenes, work, cfg, a.force, data["characters"])
+        thumb_images = generate_thumbnail_images(data, work, cfg, a.force)
+
     if cfg.motion_engine == "ltx":
         with rep.stage(f"[4/6] Видео клипове (LTX-2.5, {cfg.ltx_width}x{cfg.ltx_height} @ {cfg.fps} fps)"):
-            clips = render_motion_clips(scenes, tl, images, work, cfg, data["characters"], a.force, rep.ltx)
+            clips = render_motion_clips(scenes, tl, plan, shot_images, work, cfg, data["characters"], a.force,
+                                        rep.ltx)
     else:
         with rep.stage("[4/6] Клипове с Ken Burns"):
             clips = render_scene_clips(scenes, tl, images, work, cfg, a.force)

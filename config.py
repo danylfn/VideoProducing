@@ -64,11 +64,22 @@ class Config:
     ltx_python: Path = field(default_factory=lambda: BASE_DIR / _env("LTX_PYTHON", ".venv-ltx/bin/python"))
     ltx_width: int = field(default_factory=lambda: _env_int("LTX_WIDTH", 1024))     # кратно на 64
     ltx_height: int = field(default_factory=lambda: _env_int("LTX_HEIGHT", 576))    # кратно на 64
-    # бенчмарк (M5 Pro): ~38 s/секунда видео при shots до ~5 s; 11.8 s shot = ~51 s/секунда (атенцията расте квадратично)
-    ltx_max_shot_sec: float = field(default_factory=lambda: _env_float("LTX_MAX_SHOT_SEC", 5.0))
+    # Всяка сцена = 2–3 shots с твърди cut-ове, всеки от собствена картина (без верижно продължение -> без дрейф
+    # на героите и без „дишащ“ zoom). Бенчмарк (M5 Pro): ~38–43 s/секунда видео при shots до ~5 s.
+    ltx_shot_sec: float = field(default_factory=lambda: _env_float("LTX_SHOT_SEC", 4.0))          # целева дължина
+    ltx_max_shot_sec: float = field(default_factory=lambda: _env_float("LTX_MAX_SHOT_SEC", 5.0))  # таван
     ltx_low_ram: bool = field(default_factory=lambda: _env("LTX_LOW_RAM", "0") == "1")
     ltx_style: str = field(default_factory=lambda: _env(
-        "LTX_STYLE", "Dark fantasy digital painting style, cinematic lighting"))
+        "LTX_STYLE", "Cinematic live-action film footage, natural realistic motion, 35mm film look"))
+    # Негативен промпт през NAG (празно = изключено, ~10% по-бързо): пази от „дишащ“ zoom, промяна на лицата и
+    # подписи. Без „frozen/no motion“: в тестовете те карат модела да преиграва (4 от 6 shots със zoom +35–80%).
+    ltx_negative: str = field(default_factory=lambda: _env(
+        "LTX_NEGATIVE", "camera zooming in and out, sudden zoom, shaky camera, fast camera movement, morphing face, "
+                        "face changing, distorted hands, extra people appearing, text, watermark, signature, "
+                        "cartoon, CGI, flicker"))
+    shot_check: bool = field(default_factory=lambda: _env("SHOT_CHECK", "1") == "1")    # автоматична проверка на zoom
+    shot_retries: int = field(default_factory=lambda: _env_int("SHOT_RETRIES", 1))      # нов опит при провал
+    film_grain: float = field(default_factory=lambda: _env_float("FILM_GRAIN", 4.0))    # 0 = без зърно
 
     # ---------- Аудио ----------
     sample_rate: int = 48000             # 48000/30fps = 1600 семпъла на кадър -> перфектен синхрон
@@ -99,7 +110,7 @@ class Config:
     # ---------- Изображения ----------
     image_engine: str = field(default_factory=lambda: _env("IMAGE_ENGINE", "mflux"))  # mflux | comfyui | placeholder | fal | replicate
     # mflux (Flux върху Apple MLX, локално)
-    mflux_model: str = field(default_factory=lambda: _env("MFLUX_MODEL", "schnell"))  # schnell | dev
+    mflux_model: str = field(default_factory=lambda: _env("MFLUX_MODEL", "flux2-klein-4b"))  # flux2-klein-4b | schnell | dev
     mflux_steps: int = field(default_factory=lambda: _env_int("MFLUX_STEPS", 0))      # 0 = авто (schnell 4, dev 25)
     mflux_quantize: int = field(default_factory=lambda: _env_int("MFLUX_QUANTIZE", 8))  # 8 | 4 | 0 (без)
     mflux_width: int = field(default_factory=lambda: _env_int("MFLUX_WIDTH", 1920))
@@ -112,11 +123,16 @@ class Config:
     comfyui_workflow: Path = field(default_factory=lambda: Path(
         _env("COMFYUI_WORKFLOW", str(BASE_DIR / "comfyui_workflow_api.json"))))
     image_workers: int = field(default_factory=lambda: _env_int("IMAGE_WORKERS", 4))
-    # Общ стилов суфикс -> визуално единство между всички сцени
+    # Общ стилов суфикс -> визуално единство между всички сцени. Кадър от игрален филм изглежда най-малко
+    # „AI“ и LTX го анимира най-естествено; „digital painting … highly detailed“ дава лъскав AI вид и фалшиви подписи.
     style_suffix: str = field(default_factory=lambda: _env(
         "STYLE_SUFFIX",
-        "dark fantasy digital painting, epic cinematic composition, dramatic rim lighting, "
-        "volumetric atmosphere, rich color grading, painterly brushwork, highly detailed"))
+        "cinematic film still from a dark medieval fantasy epic, no modern objects, shot on 35mm film, natural practical lighting, "
+        "muted desaturated colors, realistic textures, soft film grain, shallow depth of field"))
+    # Библиотека с герои: по един референтен портрет на герой (общ за всички епизоди); всяка картина с {герой}
+    # се генерира от него -> едно и също лице и костюм във всички сцени и епизоди. Само за FLUX.2-klein.
+    character_refs: bool = field(default_factory=lambda: _env("CHARACTER_REFS", "1") == "1")
+    characters_dir: Path = field(default_factory=lambda: BASE_DIR / _env("CHARACTERS_DIR", "characters"))
     negative_prompt: str = ("text, letters, watermark, logo, signature, ui, frame, blurry, lowres, "
                             "deformed hands, extra fingers, extra limbs, jpeg artifacts")
     grade_contrast: float = 1.06
@@ -167,5 +183,7 @@ class Config:
             raise SystemExit(f"❌ MOTION_ENGINE трябва да е kenburns или ltx, не '{self.motion_engine}'")
         if self.ltx_width % 64 or self.ltx_height % 64:
             raise SystemExit("❌ LTX_WIDTH и LTX_HEIGHT трябва да са кратни на 64")
+        if not 2.0 <= self.ltx_shot_sec <= self.ltx_max_shot_sec:
+            raise SystemExit("❌ LTX_SHOT_SEC трябва да е между 2 и LTX_MAX_SHOT_SEC")
         self.output_dir = Path(self.output_dir)
         return self

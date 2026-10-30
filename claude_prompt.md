@@ -26,21 +26,17 @@ RETENTION (what YouTube and TikTok reward – follow strictly)
 
 CHARACTERS (visual consistency – critical)
 - Define every character who appears in more than one image in "characters": a snake_case key -> ONE noun phrase of 25–45 words starting with "a"/"an": apparent age, build, face and hair, signature armor/clothing with exact colors, weapon or key prop. Purely visual: no names, no lore, no personality.
-- Different ages or forms of the same person get separate keys (e.g. darius_young, darius).
-- In image_prompt refer to a character ONLY as {key} – e.g. "{darius} standing on a cliff at dawn". The pipeline replaces {key} with the full description. Never write the character's name in an image_prompt.
+- Different ages or forms of the same person get separate keys (e.g. darius_young, darius). Reuse the exact same key and description as earlier episodes for recurring characters – the pipeline keeps one reference portrait per description, so the face stays the same across the whole channel.
+- In prompts refer to a character ONLY as {key} – e.g. "{darius} standing on a cliff at dawn". Never write the character's name in an image_prompt or video_prompt.
 
-IMAGE PROMPTS (English, always)
-- One concrete visual per scene: subject + action + setting + composition (wide shot / close-up / from behind) + lighting/mood. Max 35 words (character descriptions get inserted on top of that).
-- Do NOT add style words (art style, "8k", "highly detailed", artist or studio names) – the pipeline appends a unified style.
-- No text, letters, logos or UI in the image.
-- Vary shots: alternate wide establishing shots, medium shots and close-ups. Favor silhouettes, shots from behind and props in hands/details for variety.
-- Optional "motion": one of zoom_in | zoom_out | pan_left | pan_right (use zoom_in for tense moments, pan for landscapes).
-
-VIDEO PROMPTS (English, always – every scene gets one)
-- Each scene's image is animated into a ~10-second video clip. "video_prompt" describes what MOVES in that image, in present tense: the subject's action, motion in the environment (wind, fire, smoke, rain, water, crowds) and the camera movement, ending with the shot type. 35–60 words.
-- It must match the image_prompt of the same scene (same subject, setting and framing); refer to characters ONLY as {key}, exactly like image_prompt.
-- Prefer motion that video models do well: slow deliberate gestures, cloth/hair/cape in the wind, flames, embers, drifting smoke, rain, marching ranks, slow camera push-ins, pans, arcs and rises. Avoid fast or complex choreography (sword fights, punches, acrobatics), close-up hand interactions and morphing faces.
-- No style words (the pipeline appends a unified style), no text, no sound descriptions.
+SHOTS (every scene is edited like a film: 2–3 shots with hard cuts)
+- Each scene has "shots": 2 shots for scenes with ≤ 20 narration words, 3 shots for longer ones. Each shot lasts ~3–5 seconds and is animated from its own image by a video model.
+- The shots of a scene show the SAME moment from different framings – typically wide → medium → close-up (or close detail → medium → wide for a reveal). Same characters, same place, same lighting, so the cuts feel continuous.
+- "image_prompt" (English, max 35 words): start with the framing ("Wide shot:", "Medium shot:", "Close-up:", "Low angle wide shot:"), then subject + action + setting + lighting. Describe it like a frame from a live-action film (real locations, natural light, practical fire/torches). No style words (the pipeline appends a unified film look), no text, letters, logos or UI.
+- "video_prompt" (English, 25–45 words, present tense): what MOVES in that image – one clear subject action (turns his head, grips the axe, steps forward, breathes heavily), motion in the environment (wind, fire, smoke, rain, banners, crowds) and EXACTLY ONE camera move from this list, then the framing:
+  "The camera slowly pushes in" | "The camera slowly trucks to the left/right" | "The camera slowly arcs to the left/right around the subject" | "Subtle handheld camera with slight natural sway" | "The camera slowly tilts up" | "Static camera" (only when the subject itself moves a lot).
+- Never use the same camera move twice in a row, and vary it across the episode. Never use crane, dolly, zoom, fast, whip or flying camera moves – video models overdo them (the character leaves the frame or the image zooms back and forth).
+- Prefer motion that video models do well: deliberate gestures, cloth/hair/cape in the wind, flames, embers, drifting smoke, rain, marching ranks. Avoid fast or complex choreography (sword fights, punches, acrobatics) and close-up hand interactions.
 
 PRONUNCIATIONS (for the text-to-speech voice)
 - In "pronunciations", list every unusual proper noun that appears in the narration (champions, places, factions, items) that an English TTS voice might mispronounce. Map the exact spelling used in the narration -> a simple English phonetic respelling with hyphens between syllables, e.g. "Kha'Zix": "Kah-Zix", "Freljord": "Frell-yord". Use the official/in-game pronunciation. No IPA. Skip ordinary English words.
@@ -80,8 +76,12 @@ OUTPUT: Return ONLY valid JSON (no comments, no trailing commas) matching exactl
     "description": "...\n\n{{CHAPTERS}}\n\n#hashtags",
     "tags": ["...", "..."],
     "script": [
-      {"scene_id": 1, "chapter": "Chapter Title", "narration": "...", "image_prompt": "{darius} ...", "video_prompt": "{darius} slowly raises ..., the camera slowly pushes in", "motion": "zoom_in"},
-      {"scene_id": 2, "narration": "...", "image_prompt": "...", "video_prompt": "..."}
+      {"scene_id": 1, "chapter": "Chapter Title", "narration": "...", "shots": [
+        {"image_prompt": "Wide shot: {darius} stands on a muddy battlefield in the rain, ...", "video_prompt": "{darius} slowly raises his bloodied axe overhead while rain falls and smoke rolls past. The camera slowly trucks to the right, wide shot"},
+        {"image_prompt": "Medium shot: {darius} ...", "video_prompt": "... The camera slowly pushes in, medium shot"},
+        {"image_prompt": "Close-up: {darius} ...", "video_prompt": "... Subtle handheld camera with slight natural sway, close-up"}
+      ]},
+      {"scene_id": 2, "narration": "...", "shots": [{"image_prompt": "...", "video_prompt": "..."}, {"image_prompt": "...", "video_prompt": "..."}]}
     ]
   },
   "shorts": [

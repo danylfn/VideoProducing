@@ -7,6 +7,10 @@
   fal / replicate – облачни (по желание)
 Всяка картина се кешира по хеш на промпта -> редакция на 1 сцена регенерира само нея.
 След генерация: crop/resize до точната резолюция + лек кинематографичен грейд + винетка.
+
+Библиотека с герои (FLUX.2-klein): за всеки герой от "characters" се прави веднъж референтен портрет
+(characters/<ключ>_<хеш>.png, общ за всички епизоди), а всяка картина с {герой} се генерира от него
+-> едно и също лице и костюм във всички сцени. Друго описание = нов портрет (старият остава за другите епизоди).
 """
 from __future__ import annotations
 
@@ -35,14 +39,48 @@ from .utils import RetryableError, check_http, ensure_dir, log, short_hash, with
 CHAR_REF = re.compile(r"\{([A-Za-z0-9_]+)\}")
 
 
-def full_prompt(scene: dict, cfg, characters: dict | None = None) -> str:
-    """Сцена + описания на героите ({darius} -> пълното визуално описание) + общ стил."""
+MAX_REFS = 3  # повече референции на картина = по-бавно и по-объркано
+
+
+def full_prompt(scene: dict, cfg, characters: dict | None = None, refs: dict | None = None) -> str:
+    """Сцена + описания на героите ({darius} -> пълното визуално описание) + общ стил.
+    С refs ({ключ: портрет}) героят се описва като „човекът от референтна картина N (описание)“."""
     chars = characters or {}
+    order = ref_keys(scene["image_prompt"], refs or {})
+
+    def sub(m):
+        key = m.group(1).lower()
+        desc = chars.get(key, m.group(1).replace("_", " "))
+        return f"the person from reference image {order.index(key) + 1} ({desc})" if key in order else desc
     p = " ".join(scene["image_prompt"].split()).rstrip(" ,.")
-    p = CHAR_REF.sub(lambda m: chars.get(m.group(1).lower(), m.group(1).replace("_", " ")), p)
+    p = CHAR_REF.sub(sub, p)
     if cfg.style_suffix and cfg.style_suffix.lower()[:30] not in p.lower():
         p = f"{p}, {cfg.style_suffix}"
     return p
+
+
+def ref_keys(prompt: str, refs: dict) -> list[str]:
+    """Героите с портрет в реда на първото им споменаване (най-много MAX_REFS)."""
+    keys = list(dict.fromkeys(k.lower() for k in CHAR_REF.findall(prompt)))
+    return [k for k in keys if k in refs][:MAX_REFS]
+
+
+def character_refs(characters: dict, cfg) -> dict[str, Path]:
+    """Референтен портрет за всеки герой (генерира само липсващите). {} ако двигателят не поддържа референции."""
+    if not (characters and cfg.character_refs and cfg.image_engine == "mflux" and _is_klein(cfg)):
+        return {}
+    lib = ensure_dir(cfg.characters_dir)
+    out = {}
+    for key, desc in characters.items():
+        prompt = (f"{desc}, full body character reference, front view, standing, plain neutral grey background, "
+                  f"even soft light, {cfg.style_suffix}")
+        h = short_hash("ref", cfg.mflux_model, cfg.mflux_quantize, prompt)
+        path = lib / f"{key}_{h}.png"
+        if not path.exists():
+            path.write_bytes(_gen_mflux(prompt, cfg, seed=int(h, 16) % (2**31 - 1), size=(576, 768)))
+            log.info("🧍 Портрет на героя '%s' готов -> %s", key, path.relative_to(cfg.characters_dir.parent))
+        out[key] = path
+    return out
 
 
 def _download(url: str) -> bytes:
@@ -195,10 +233,23 @@ def _mflux_load(cfg):
 def _mflux_load_model(cfg):
     if _is_klein(cfg):  # FLUX.2 [klein] 4B: Apache 2.0, без gated достъп в Hugging Face
         from mflux.models.common.config.model_config import ModelConfig
-        from mflux.models.flux2.variants import Flux2Klein
+        from mflux.models.flux2.variants import Flux2KleinEdit
         log.info("🧠 Зареждам %s (MLX, %s-bit)... първия път тегли теглата от Hugging Face",
                  cfg.mflux_model, cfg.mflux_quantize or 16)
-        _mflux_state.update(mode="api", Config=None, model=Flux2Klein(
+        class KleinWithRefs(Flux2KleinEdit):
+            """Edit вариантът прави и обикновени картини (без референции) -> един модел в паметта, не два.
+            mflux 0.23 конкатенира None, когато няма референция -> подаваме празни (0 токена) вместо None."""
+            def _predict(self, transformer):
+                base = super()._predict(transformer)
+
+                def predict(**kw):
+                    if kw.get("image_latents") is None:
+                        kw["image_latents"] = kw["latents"][:, :0]
+                        kw["image_latent_ids"] = kw["latent_ids"][:, :0]
+                    return base(**kw)
+                return predict
+
+        _mflux_state.update(mode="api", Config=None, refs=True, model=KleinWithRefs(
             model_config=ModelConfig.from_name(cfg.mflux_model), quantize=cfg.mflux_quantize or None))
         return
     Flux1 = Config = None
@@ -226,11 +277,13 @@ def _mflux_load_model(cfg):
         raise SystemExit("❌ Липсва mflux. Инсталирайте: pip install -r requirements-local.txt")
 
 
-def _mflux_cli(prompt: str, seed: int, steps: int, out: Path, cfg) -> None:
-    cmd = ["mflux-generate-flux2" if _is_klein(cfg) else "mflux-generate", "--model", cfg.mflux_model,
-           "--prompt", prompt, "--steps", str(steps),
-           "--seed", str(seed), "--width", str(cfg.mflux_width), "--height", str(cfg.mflux_height),
-           "--output", str(out)]
+def _mflux_cli(prompt: str, seed: int, steps: int, out: Path, cfg, size: tuple[int, int],
+               refs: list[Path]) -> None:
+    cmd = ["mflux-generate-flux2" + ("-edit" if refs else "") if _is_klein(cfg) else "mflux-generate",
+           "--model", cfg.mflux_model, "--prompt", prompt, "--steps", str(steps),
+           "--seed", str(seed), "--width", str(size[0]), "--height", str(size[1]), "--output", str(out)]
+    if refs:
+        cmd += ["--image-paths", *map(str, refs)]
     if cfg.mflux_quantize:
         cmd += ["--quantize", str(cfg.mflux_quantize)]
     res = subprocess.run(cmd, capture_output=True, text=True)
@@ -238,15 +291,19 @@ def _mflux_cli(prompt: str, seed: int, steps: int, out: Path, cfg) -> None:
         raise RuntimeError("mflux-generate грешка:\n" + "\n".join(res.stderr.strip().splitlines()[-10:]))
 
 
-def _gen_mflux(prompt: str, cfg, seed: int) -> bytes:
+def _gen_mflux(prompt: str, cfg, seed: int, size: tuple[int, int] | None = None,
+               refs: list[Path] | None = None) -> bytes:
     steps = cfg.mflux_steps or (4 if cfg.mflux_model == "schnell" or _is_klein(cfg) else 25)
+    w, h = size or (cfg.mflux_width, cfg.mflux_height)
     with _mflux_lock:
         _mflux_load(cfg)
         with tempfile.TemporaryDirectory() as td:
             out = Path(td) / "img.png"
             if _mflux_state["mode"] == "api":
                 try:
-                    params = dict(num_inference_steps=steps, height=cfg.mflux_height, width=cfg.mflux_width)
+                    params = dict(num_inference_steps=steps, height=h, width=w)
+                    if refs and _mflux_state.get("refs"):
+                        params["image_paths"] = [str(r) for r in refs]
                     if _mflux_state["Config"] is not None:
                         params = {"config": _mflux_state["Config"](**params)}
                     img = _mflux_state["model"].generate_image(seed=seed, prompt=prompt, **params)
@@ -256,7 +313,7 @@ def _gen_mflux(prompt: str, cfg, seed: int) -> bytes:
                     _mflux_state.clear()
                     _mflux_state["mode"] = "cli"
             if _mflux_state["mode"] == "cli":
-                _mflux_cli(prompt, seed, steps, out, cfg)
+                _mflux_cli(prompt, seed, steps, out, cfg, (w, h), refs or [])
             return out.read_bytes()
 
 
@@ -312,39 +369,49 @@ def grade(raw: bytes, cfg, size: tuple[int, int]) -> Image.Image:
 
 
 def generate_images(scenes: list[dict], work: Path, cfg, force: bool = False,
-                    characters: dict | None = None) -> list[Path]:
+                    characters: dict | None = None, size: tuple[int, int] | None = None) -> list[Path]:
+    """scenes: [{"scene_id", "image_prompt", по желание "name" (име на файла) и "label" (за лога)}].
+    size: размер на картините (по подразбиране мастърът); за LTX shots = размерът на видео модела."""
     raw_dir, out_dir = ensure_dir(work / "images" / "raw"), ensure_dir(work / "images")
     engine = cfg.image_engine
+    out_size = size or (cfg.width, cfg.height)
+    gen_size = (out_size[0], out_size[1] + (-out_size[1]) % 16) if size else None  # кратно на 16 за Flux
     model = {"fal": cfg.fal_model, "replicate": cfg.replicate_model,
-             "mflux": [cfg.mflux_model, cfg.mflux_steps, cfg.mflux_quantize, cfg.mflux_width, cfg.mflux_height],
+             "mflux": [cfg.mflux_model, cfg.mflux_steps, cfg.mflux_quantize,
+                       *(gen_size or (cfg.mflux_width, cfg.mflux_height))],
              "comfyui": str(cfg.comfyui_workflow), "placeholder": "v1"}.get(engine)
     if model is None:
         raise SystemExit(f"❌ Непознат image двигател: {engine}")
+    refs = character_refs(characters or {}, cfg)
 
     def job(sc: dict) -> Path:
-        prompt = full_prompt(sc, cfg, characters)
-        key = short_hash(engine, model, prompt)
-        raw = raw_dir / f"scene_{sc['scene_id']:03d}_{key}.png"
-        out = out_dir / f"scene_{sc['scene_id']:03d}_{key}_{cfg.width}.png"
+        prompt = full_prompt(sc, cfg, characters, refs)
+        ref_paths = [refs[k] for k in ref_keys(sc["image_prompt"], refs)]
+        key = short_hash(engine, model, prompt, [r.name for r in ref_paths])
+        name = sc.get("name") or f"scene_{sc['scene_id']:03d}"
+        raw = raw_dir / f"{name}_{key}.png"
+        out = out_dir / f"{name}_{key}_{out_size[0]}.png"
         if force or not raw.exists():
             if engine == "fal":
                 data = _gen_fal(prompt, cfg)
             elif engine == "replicate":
                 data = _gen_replicate(prompt, cfg)
             elif engine == "mflux":
-                data = _gen_mflux(prompt, cfg, seed=int(key, 16) % (2**31 - 1))
+                data = _gen_mflux(prompt, cfg, seed=int(key, 16) % (2**31 - 1), size=gen_size, refs=ref_paths)
             elif engine == "comfyui":
                 data = _gen_comfyui(prompt, cfg)
             else:
-                data = _gen_placeholder(prompt, cfg, f"SCENE {sc['scene_id']}")
+                data = _gen_placeholder(prompt, cfg, sc.get("label", f"SCENE {sc['scene_id']}").upper())
             raw.write_bytes(data)
-            log.info("🖼  Сцена %3d: изображение готово", sc["scene_id"])
+            log.info("🖼  %s: изображение готово%s", sc.get("label", f"Сцена {sc['scene_id']:3d}"),
+                     f" (герои: {', '.join(r.stem.rsplit('_', 1)[0] for r in ref_paths)})" if ref_paths else "")
         if force or not out.exists():
-            grade(raw.read_bytes(), cfg, (cfg.width, cfg.height)).save(out, "PNG", compress_level=3)
+            grade(raw.read_bytes(), cfg, out_size).save(out, "PNG", compress_level=3)
         return out
 
-    workers = 1 if engine in ("comfyui", "mflux") else cfg.image_workers
-    with ThreadPoolExecutor(max_workers=workers) as ex:
+    if engine in ("comfyui", "mflux"):  # една по една; mflux и в същата нишка (MLX стриймовете са по нишка)
+        return [job(sc) for sc in scenes]
+    with ThreadPoolExecutor(max_workers=cfg.image_workers) as ex:
         return list(ex.map(job, scenes))
 
 

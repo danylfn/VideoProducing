@@ -96,6 +96,9 @@ class RunReport:
             if x["generated"]:
                 md.append(f"- Чисто време на модела: {fmt_ts(x['compute'])} за {x['video_sec']:.0f} s видео "
                           f"(**{x['compute'] / max(x['video_sec'], 1e-6):.1f} s на секунда видео**)")
+            if x.get("retried") or x.get("still_bad"):
+                md.append(f"- Автоматична проверка: {x['retried']} shots с „дишащ“ zoom или скок са генерирани наново"
+                          + (f"; остават: {', '.join(x['still_bad'])}" if x.get("still_bad") else ""))
             md.append("")
         md += ["## Заспиване на Mac-а", ""]
         if sleeps:
