@@ -90,9 +90,11 @@ class RunReport:
               *[f"| {n} | {fmt_ts(s)} |" for n, s in self.stages], ""]
         if self.ltx:
             x = self.ltx
+            fresh = x["generated"] - x.get("retried", 0)  # повторните опити не са нови shots
             md += ["## Видео (LTX)", "",
-                   f"- Shots: {x['shots']} общо, **{x['generated']} генерирани сега**, "
-                   f"{x['shots'] - x['generated']} от кеша"]
+                   f"- Shots: {x['shots']} общо, **{fresh} генерирани сега**"
+                   + (f" (+{x['retried']} повторни)" if x.get("retried") else "")
+                   + f", {max(x['shots'] - fresh, 0)} от кеша"]
             if x["generated"]:
                 md.append(f"- Чисто време на модела: {fmt_ts(x['compute'])} за {x['video_sec']:.0f} s видео "
                           f"(**{x['compute'] / max(x['video_sec'], 1e-6):.1f} s на секунда видео**)")
